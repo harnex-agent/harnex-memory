@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from harnex_memory.core.codex_docs import codex_template_for, list_codex_document_statuses
 from harnex_memory.core.models import DocumentKind, DocumentStatus
-from harnex_memory.core.paths import DOCUMENT_PATHS, document_path
+from harnex_memory.core.paths import DOCUMENT_PATHS, document_path, ensure_inside_project
 
 DOCUMENT_TEMPLATES: dict[DocumentKind, str] = {
     DocumentKind.SKILL: "# Skills\n\n",
@@ -13,10 +14,11 @@ DOCUMENT_TEMPLATES: dict[DocumentKind, str] = {
 
 
 def list_document_statuses(project_root: Path) -> list[DocumentStatus]:
-    return [
+    legacy_statuses = [
         DocumentStatus(kind=kind, path=str(document_path(project_root, kind)), exists=path.exists())
         for kind, path in ((kind, document_path(project_root, kind)) for kind in DOCUMENT_PATHS)
     ]
+    return [*legacy_statuses, *list_codex_document_statuses(project_root)]
 
 
 def read_document(project_root: Path, kind: DocumentKind) -> str:
@@ -24,6 +26,18 @@ def read_document(project_root: Path, kind: DocumentKind) -> str:
     if path.exists():
         return path.read_text(encoding="utf-8")
     return DOCUMENT_TEMPLATES[kind]
+
+
+def read_document_at_path(
+    project_root: Path,
+    path: str | Path,
+    fallback_kind: DocumentKind,
+    target_kind: str | None = None,
+) -> str:
+    resolved = ensure_inside_project(project_root, path)
+    if resolved.exists():
+        return resolved.read_text(encoding="utf-8")
+    return codex_template_for(target_kind) or DOCUMENT_TEMPLATES[fallback_kind]
 
 
 def build_document_content(project_root: Path, kind: DocumentKind, addition: str) -> str:

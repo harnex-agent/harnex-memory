@@ -38,6 +38,11 @@ def ensure_inside_project(project_root: Path, path: str | Path) -> Path:
     return resolved
 
 
+def project_relative_path(project_root: Path, path: str | Path) -> str:
+    resolved = ensure_inside_project(project_root, path)
+    return resolved.relative_to(project_root.resolve()).as_posix()
+
+
 def memory_dir(project_root: Path) -> Path:
     return ensure_inside_project(project_root, ".harnex/memory")
 

@@ -1,4 +1,7 @@
+import pytest
+
 from harnex_memory.core.models import DocumentKind, MemoryCandidate
+from harnex_memory.core.paths import PathSafetyError
 from harnex_memory.core.preview import build_candidates_preview, make_diff, write_preview
 
 
@@ -52,3 +55,50 @@ def test_build_candidates_preview_merges_same_target_changes(tmp_path):
     assert len(preview.file_changes) == 1
     assert "## 첫 번째" in preview.file_changes[0].after
     assert "## 두 번째" in preview.file_changes[0].after
+
+
+def test_build_candidates_preview_uses_candidate_target_path(tmp_path):
+    candidate = MemoryCandidate(
+        target=DocumentKind.RULE,
+        title="규칙",
+        content="## Project Instructions\n\n- 항상 테스트를 실행한다.\n",
+        reason="직접 제약",
+        evidence=["constraint-preview"],
+        target_kind="codex_agents",
+        target_path="AGENTS.md",
+    )
+
+    preview = build_candidates_preview(tmp_path, [candidate], source="test")
+
+    assert preview.file_changes[0].path == str(tmp_path / "AGENTS.md")
+    assert "항상 테스트를 실행한다." in preview.file_changes[0].after
+    assert not (tmp_path / "AGENTS.md").exists()
+
+
+def test_build_candidates_preview_rejects_escaped_target_path(tmp_path):
+    candidate = MemoryCandidate(
+        target=DocumentKind.RULE,
+        title="규칙",
+        content="## Bad\n\n- nope\n",
+        reason="직접 제약",
+        evidence=["constraint-preview"],
+        target_path="../AGENTS.md",
+    )
+
+    with pytest.raises(PathSafetyError):
+        build_candidates_preview(tmp_path, [candidate], source="test")
+
+
+def test_build_candidates_preview_skips_duplicate_content(tmp_path):
+    candidate = MemoryCandidate(
+        target=DocumentKind.RULE,
+        title="규칙",
+        content="## Project Instructions\n\n- 중복 금지\n",
+        reason="직접 제약",
+        evidence=["constraint-preview"],
+        target_path="AGENTS.md",
+    )
+
+    preview = build_candidates_preview(tmp_path, [candidate, candidate], source="test")
+
+    assert preview.file_changes[0].after.count("중복 금지") == 1

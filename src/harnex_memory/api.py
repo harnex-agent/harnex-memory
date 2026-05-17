@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from harnex_memory.core.analyzer import suggest_candidates
+from harnex_memory.core.analyzer import candidate_from_constraint, suggest_candidates
 from harnex_memory.core.apply import apply_preview_changes
 from harnex_memory.core.documents import list_document_statuses
 from harnex_memory.core.models import DocumentKind, DocumentStatus, Preview, PromptRecord
@@ -35,6 +36,27 @@ def preview_document_update(
     return preview, path
 
 
+def preview_constraint_update(
+    project_root: str | Path,
+    constraint: str,
+    source: str = "constraint-preview",
+    metadata: dict[str, Any] | None = None,
+) -> tuple[Preview, Path]:
+    root = resolve_project_root(project_root)
+    candidate = candidate_from_constraint(root, constraint, source=source)
+    if metadata:
+        candidate = replace(
+            candidate,
+            evidence=[
+                *candidate.evidence,
+                *[f"{key}={value}" for key, value in sorted(metadata.items())],
+            ],
+        )
+    preview = build_candidates_preview(root, [candidate], source=source)
+    path = write_preview(root, preview)
+    return preview, path
+
+
 def apply_preview(project_root: str | Path, preview_path: str | Path) -> Path:
     root = resolve_project_root(project_root)
     path = ensure_inside_project(root, preview_path)
@@ -59,7 +81,7 @@ def suggest_prompt_updates(
 ) -> tuple[Preview | None, Path | None]:
     root = resolve_project_root(project_root)
     records = read_prompt_records(root)
-    candidates = suggest_candidates(records, min_count=min_count)
+    candidates = suggest_candidates(records, min_count=min_count, project_root=root)
     if not candidates:
         return None, None
     preview = build_candidates_preview(root, candidates, source=source)

@@ -5,9 +5,20 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from harnex_memory.core.documents import read_document
-from harnex_memory.core.models import DocumentKind, FileChange, MemoryCandidate, Preview
-from harnex_memory.core.paths import document_path, previews_dir
+from harnex_memory.core.documents import read_document, read_document_at_path
+from harnex_memory.core.models import (
+    DocumentKind,
+    FileChange,
+    InsertionStrategy,
+    MemoryCandidate,
+    Preview,
+)
+from harnex_memory.core.paths import (
+    document_path,
+    ensure_inside_project,
+    previews_dir,
+    project_relative_path,
+)
 
 
 def make_diff(path: Path, before: str, after: str) -> str:
@@ -42,6 +53,8 @@ def build_document_preview(
         content=after,
         reason=f"{source}에서 요청한 문서 변경입니다.",
         evidence=[source],
+        target_path=project_relative_path(project_root, path),
+        insertion_strategy=InsertionStrategy.REPLACE_MANAGED_BLOCK.value,
     )
     return Preview(
         project_root=str(project_root),
@@ -58,13 +71,19 @@ def build_candidates_preview(
     source: str,
 ) -> Preview:
     file_changes: list[FileChange] = []
-    candidates_by_target: dict[DocumentKind, list[MemoryCandidate]] = {}
+    candidates_by_target: dict[Path, list[MemoryCandidate]] = {}
     for candidate in candidates:
-        candidates_by_target.setdefault(candidate.target, []).append(candidate)
+        path = target_path_for_candidate(project_root, candidate)
+        candidates_by_target.setdefault(path, []).append(candidate)
 
-    for target, target_candidates in candidates_by_target.items():
-        path = document_path(project_root, target)
-        before = read_document(project_root, target)
+    for path, target_candidates in candidates_by_target.items():
+        first_candidate = target_candidates[0]
+        before = read_document_at_path(
+            project_root,
+            path,
+            fallback_kind=first_candidate.target,
+            target_kind=first_candidate.target_kind,
+        )
         after = before
         for candidate in target_candidates:
             after = append_content(after, candidate.content)
@@ -91,6 +110,12 @@ def append_content(current: str, addition: str) -> str:
         return current
     separator = "" if current.endswith("\n\n") else "\n\n" if current.endswith("\n") else "\n\n"
     return f"{current}{separator}{content}\n"
+
+
+def target_path_for_candidate(project_root: Path, candidate: MemoryCandidate) -> Path:
+    if candidate.target_path:
+        return ensure_inside_project(project_root, candidate.target_path)
+    return document_path(project_root, candidate.target)
 
 
 def write_preview(project_root: Path, preview: Preview) -> Path:

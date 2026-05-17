@@ -9,6 +9,7 @@ import typer
 from harnex_memory.api import (
     apply_preview,
     list_documents,
+    preview_constraint_update,
     preview_document_update,
     record_prompt,
     suggest_prompt_updates,
@@ -19,8 +20,10 @@ from harnex_memory.core.paths import ensure_inside_project, resolve_project_root
 app = typer.Typer(help="Manage harnex memory documents and prompt records.")
 docs_app = typer.Typer(help="Manage skill/rule/hook documents.")
 prompt_app = typer.Typer(help="Record and analyze prompt memory.")
+constraint_app = typer.Typer(help="Preview direct user constraints.")
 app.add_typer(docs_app, name="docs")
 app.add_typer(prompt_app, name="prompt")
+app.add_typer(constraint_app, name="constraint")
 
 
 ProjectRootOption = Annotated[
@@ -67,6 +70,22 @@ def docs_apply(
 ) -> None:
     result_path = apply_preview(project_root, preview)
     _print_json({"apply_result_path": str(result_path)})
+
+
+@constraint_app.command("preview")
+def constraint_preview(
+    project_root: ProjectRootOption,
+    constraint: Annotated[str, typer.Option("--constraint")],
+    source: Annotated[str, typer.Option("--source")] = "constraint-preview",
+    metadata: Annotated[list[str] | None, typer.Option("--metadata")] = None,
+) -> None:
+    preview, path = preview_constraint_update(
+        project_root,
+        constraint=constraint,
+        source=source,
+        metadata=_parse_metadata(metadata or []),
+    )
+    _print_json({"preview_path": str(path), "preview": preview.to_dict()})
 
 
 @prompt_app.command("record")

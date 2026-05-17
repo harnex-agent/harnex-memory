@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -16,6 +17,21 @@ class DocumentKind(StrEnum):
     HOOK = "hook"
 
 
+class TargetKind(StrEnum):
+    CODEX_AGENTS = "codex_agents"
+    CODEX_SKILL = "codex_skill"
+    SKILL = "skill"
+    RULE = "rule"
+    HOOK = "hook"
+
+
+class InsertionStrategy(StrEnum):
+    APPEND_SECTION = "append_section"
+    APPEND_BULLET = "append_bullet"
+    CREATE_FILE = "create_file"
+    REPLACE_MANAGED_BLOCK = "replace_managed_block"
+
+
 class ChangeRisk(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
@@ -27,6 +43,8 @@ class DocumentStatus:
     kind: DocumentKind
     path: str
     exists: bool
+    target_kind: str | None = None
+    agent: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -66,6 +84,29 @@ class MemoryCandidate:
     reason: str
     evidence: list[str]
     risk: ChangeRisk = ChangeRisk.LOW
+    target_kind: str | None = None
+    target_path: str | None = None
+    insertion_strategy: str | None = None
+    section: str | None = None
+    id: str = ""
+
+    def __post_init__(self) -> None:
+        target_kind = self.target_kind or default_target_kind(self.target)
+        insertion_strategy = self.insertion_strategy or InsertionStrategy.APPEND_SECTION.value
+        object.__setattr__(self, "target_kind", str(target_kind))
+        object.__setattr__(self, "insertion_strategy", str(insertion_strategy))
+        if not self.id:
+            object.__setattr__(
+                self,
+                "id",
+                stable_candidate_id(
+                    target=self.target,
+                    target_kind=str(target_kind),
+                    target_path=self.target_path,
+                    title=self.title,
+                    content=self.content,
+                ),
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -112,6 +153,17 @@ class Preview:
                     reason=str(candidate["reason"]),
                     evidence=[str(item) for item in candidate.get("evidence", [])],
                     risk=ChangeRisk(candidate.get("risk", ChangeRisk.LOW)),
+                    target_kind=(
+                        str(candidate["target_kind"]) if candidate.get("target_kind") else None
+                    ),
+                    target_path=str(candidate["target_path"])
+                    if candidate.get("target_path")
+                    else None,
+                    insertion_strategy=str(candidate["insertion_strategy"])
+                    if candidate.get("insertion_strategy")
+                    else None,
+                    section=str(candidate["section"]) if candidate.get("section") else None,
+                    id=str(candidate["id"]) if candidate.get("id") else "",
                 )
                 for candidate in data.get("candidates", [])
             ],
@@ -131,3 +183,31 @@ class Preview:
 
 def path_to_str(path: Path) -> str:
     return str(path)
+
+
+def default_target_kind(target: DocumentKind) -> str:
+    if target == DocumentKind.SKILL:
+        return TargetKind.SKILL.value
+    if target == DocumentKind.HOOK:
+        return TargetKind.HOOK.value
+    return TargetKind.RULE.value
+
+
+def stable_candidate_id(
+    target: DocumentKind,
+    target_kind: str,
+    target_path: str | None,
+    title: str,
+    content: str,
+) -> str:
+    digest = sha256()
+    digest.update(str(target).encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(target_kind.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update((target_path or "").encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(title.strip().encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(content.strip().encode("utf-8"))
+    return digest.hexdigest()[:16]
