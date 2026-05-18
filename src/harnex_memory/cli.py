@@ -8,22 +8,27 @@ import typer
 
 from harnex_memory.api import (
     apply_preview,
+    get_memory_item,
     list_documents,
+    list_memory_items,
     preview_constraint_update,
     preview_document_update,
+    preview_memory_item_action,
     record_prompt,
     suggest_prompt_updates,
 )
-from harnex_memory.core.models import DocumentKind
+from harnex_memory.core.models import DocumentKind, ItemAction
 from harnex_memory.core.paths import ensure_inside_project, resolve_project_root
 
 app = typer.Typer(help="Manage harnex memory documents and prompt records.")
 docs_app = typer.Typer(help="Manage skill/rule/hook documents.")
 prompt_app = typer.Typer(help="Record and analyze prompt memory.")
 constraint_app = typer.Typer(help="Preview direct user constraints.")
+items_app = typer.Typer(help="List and preview actions for GUI memory items.")
 app.add_typer(docs_app, name="docs")
 app.add_typer(prompt_app, name="prompt")
 app.add_typer(constraint_app, name="constraint")
+app.add_typer(items_app, name="items")
 
 
 ProjectRootOption = Annotated[
@@ -40,6 +45,43 @@ def _print_json(data: object) -> None:
 def docs_list(project_root: ProjectRootOption) -> None:
     statuses = list_documents(project_root)
     _print_json({"documents": [status.to_dict() for status in statuses]})
+
+
+@items_app.command("list")
+def items_list(
+    project_root: ProjectRootOption,
+    cwd: Annotated[Path | None, typer.Option("--cwd")] = None,
+    include_readonly: Annotated[bool, typer.Option("--include-readonly")] = False,
+) -> None:
+    items = list_memory_items(project_root, cwd=cwd, include_readonly=include_readonly)
+    _print_json({"items": [item.to_dict() for item in items]})
+
+
+@items_app.command("show")
+def items_show(
+    project_root: ProjectRootOption,
+    item_id: Annotated[str, typer.Option("--item-id")],
+) -> None:
+    item = get_memory_item(project_root, item_id)
+    _print_json({"item": item.to_dict()})
+
+
+@items_app.command("preview")
+def items_preview(
+    project_root: ProjectRootOption,
+    item_id: Annotated[str, typer.Option("--item-id")],
+    action: Annotated[ItemAction, typer.Option("--action", case_sensitive=False)],
+    expected_source_hash: Annotated[str | None, typer.Option("--expected-source-hash")] = None,
+    cwd: Annotated[Path | None, typer.Option("--cwd")] = None,
+) -> None:
+    preview, path = preview_memory_item_action(
+        project_root,
+        item_id=item_id,
+        action=action.value,
+        expected_source_hash=expected_source_hash,
+        cwd=cwd,
+    )
+    _print_json({"preview_path": str(path), "preview": preview.to_dict()})
 
 
 @docs_app.command("preview")

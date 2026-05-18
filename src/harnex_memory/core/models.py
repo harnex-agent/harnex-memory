@@ -20,6 +20,12 @@ class DocumentKind(StrEnum):
 class TargetKind(StrEnum):
     CODEX_AGENTS = "codex_agents"
     CODEX_SKILL = "codex_skill"
+    CODEX_CONFIG = "codex_config"
+    CODEX_RULES = "codex_rules"
+    CODEX_HOOKS = "codex_hooks"
+    LEGACY_SKILL = "legacy_skill"
+    LEGACY_RULE = "legacy_rule"
+    LEGACY_HOOK = "legacy_hook"
     SKILL = "skill"
     RULE = "rule"
     HOOK = "hook"
@@ -38,6 +44,38 @@ class ChangeRisk(StrEnum):
     HIGH = "high"
 
 
+class MemoryScope(StrEnum):
+    GLOBAL_USER = "global_user"
+    PROJECT_ROOT = "project_root"
+    PROJECT_CODEX = "project_codex"
+    NESTED_PROJECT = "nested_project"
+    MANAGED = "managed"
+
+
+class ItemFormat(StrEnum):
+    MARKDOWN_SECTION = "markdown_section"
+    MARKDOWN_BULLET = "markdown_bullet"
+    STARLARK_RULE = "starlark_rule"
+    TOML_CONFIG = "toml_config"
+    JSON_HOOK = "json_hook"
+    SKILL_DOCUMENT = "skill_document"
+
+
+class ItemStatus(StrEnum):
+    ACTIVE = "active"
+    DISABLED = "disabled"
+    SHADOWED = "shadowed"
+    CONFLICT = "conflict"
+    READ_ONLY = "read_only"
+    DELETED = "deleted"
+
+
+class ItemAction(StrEnum):
+    DELETE = "delete"
+    DISABLE = "disable"
+    ENABLE = "enable"
+
+
 @dataclass(frozen=True)
 class DocumentStatus:
     kind: DocumentKind
@@ -48,6 +86,78 @@ class DocumentStatus:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class TextSpan:
+    start_line: int
+    end_line: int
+
+    def to_dict(self) -> dict[str, int]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TextSpan:
+        return cls(start_line=int(data["start_line"]), end_line=int(data["end_line"]))
+
+
+@dataclass(frozen=True)
+class MemoryItem:
+    document_kind: DocumentKind
+    target_kind: str
+    scope: str
+    path: str
+    title: str
+    body: str
+    format: str
+    status: str = ItemStatus.ACTIVE.value
+    span: TextSpan | None = None
+    source_hash: str = ""
+    reason: str = ""
+    id: str = ""
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        source_hash = self.source_hash or stable_item_source_hash(self.body)
+        object.__setattr__(self, "source_hash", source_hash)
+        if not self.id:
+            object.__setattr__(
+                self,
+                "id",
+                stable_item_id(
+                    scope=self.scope,
+                    path=self.path,
+                    document_kind=self.document_kind,
+                    target_kind=self.target_kind,
+                    item_format=self.format,
+                    span=self.span,
+                ),
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        data = asdict(self)
+        data["document_kind"] = self.document_kind.value
+        data["span"] = self.span.to_dict() if self.span else None
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> MemoryItem:
+        span_data = data.get("span")
+        return cls(
+            document_kind=DocumentKind(data["document_kind"]),
+            target_kind=str(data["target_kind"]),
+            scope=str(data["scope"]),
+            path=str(data["path"]),
+            title=str(data["title"]),
+            body=str(data["body"]),
+            format=str(data["format"]),
+            status=str(data.get("status") or ItemStatus.ACTIVE.value),
+            span=TextSpan.from_dict(span_data) if span_data else None,
+            source_hash=str(data.get("source_hash") or ""),
+            reason=str(data.get("reason") or ""),
+            id=str(data.get("id") or ""),
+            schema_version=str(data.get("schema_version") or SCHEMA_VERSION),
+        )
 
 
 @dataclass(frozen=True)
@@ -131,12 +241,16 @@ class Preview:
     candidates: list[MemoryCandidate]
     file_changes: list[FileChange]
     warnings: list[str] = field(default_factory=list)
+    action: str | None = None
+    items: list[MemoryItem] = field(default_factory=list)
+    blocked_reasons: list[str] = field(default_factory=list)
     schema_version: str = SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["candidates"] = [candidate.to_dict() for candidate in self.candidates]
         data["file_changes"] = [change.to_dict() for change in self.file_changes]
+        data["items"] = [item.to_dict() for item in self.items]
         return data
 
     @classmethod
@@ -177,6 +291,9 @@ class Preview:
                 for change in data.get("file_changes", [])
             ],
             warnings=[str(item) for item in data.get("warnings", [])],
+            action=str(data["action"]) if data.get("action") else None,
+            items=[MemoryItem.from_dict(item) for item in data.get("items", [])],
+            blocked_reasons=[str(item) for item in data.get("blocked_reasons", [])],
             schema_version=str(data.get("schema_version") or SCHEMA_VERSION),
         )
 
@@ -210,4 +327,38 @@ def stable_candidate_id(
     digest.update(title.strip().encode("utf-8"))
     digest.update(b"\0")
     digest.update(content.strip().encode("utf-8"))
+    return digest.hexdigest()[:16]
+
+
+def stable_item_source_hash(body: str) -> str:
+    digest = sha256()
+    digest.update(body.encode("utf-8"))
+    return digest.hexdigest()[:16]
+
+
+def stable_item_id(
+    scope: str,
+    path: str,
+    document_kind: DocumentKind,
+    target_kind: str,
+    item_format: str,
+    span: TextSpan | None,
+) -> str:
+    digest = sha256()
+    digest.update(scope.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(path.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(document_kind.value.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(target_kind.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(item_format.encode("utf-8"))
+    digest.update(b"\0")
+    if span:
+        digest.update(str(span.start_line).encode("utf-8"))
+        digest.update(b":")
+        digest.update(str(span.end_line).encode("utf-8"))
+    else:
+        digest.update(b"no-span")
     return digest.hexdigest()[:16]

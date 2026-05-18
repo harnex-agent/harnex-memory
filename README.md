@@ -11,6 +11,9 @@ harnex-memory docs list --project-root <path>
 harnex-memory docs preview --project-root <path> --target <skill|rule|hook> --content <path>
 harnex-memory docs apply --project-root <path> --preview <path>
 harnex-memory constraint preview --project-root <path> --constraint <text>
+harnex-memory items list --project-root <path>
+harnex-memory items show --project-root <path> --item-id <id>
+harnex-memory items preview --project-root <path> --item-id <id> --action <delete|disable|enable>
 harnex-memory prompt record --project-root <path> --source <source> --prompt <text>
 harnex-memory prompt suggest --project-root <path>
 ```
@@ -26,3 +29,23 @@ documents plus Codex-facing documents such as project-root `AGENTS.md` and
 calls. General project rules preview into `AGENTS.md`, skill-related constraints
 preview into a Codex skill document, and hook-related constraints keep using the
 hook-compatible memory document.
+
+`items list` exposes GUI-friendly structured items from skill/rule/hook documents.
+The first supported editable sources are legacy `.harnex/memory/*.md`,
+project-root `AGENTS.md`, and project `.codex/skills` Markdown files. Each item
+includes a stable `id`, `status`, `scope`, source `path`, line span, and
+`source_hash`.
+
+`items preview` creates a preview for item-level actions. `delete` removes the
+selected item from its source document. `disable` removes it from the active
+document and stores the full item in `.harnex/memory/disabled-items.json`.
+`enable` restores a disabled item and removes it from the disabled store. These
+commands still do not write target documents directly; use `docs apply` with the
+returned preview path to apply approved changes.
+
+Codex scope handling follows Codex's own layering rules where they are explicit:
+global user guidance lives under `CODEX_HOME`/`~/.codex`, project guidance comes
+from `AGENTS.md` files from the project root down to the current working
+directory, and trusted project `.codex/` directories are project/team config
+layers. `AGENTS.override.md` shadows `AGENTS.md` in the same directory. Duplicate
+Codex skill names are surfaced as conflicts instead of being silently resolved.
