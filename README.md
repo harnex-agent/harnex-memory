@@ -49,3 +49,20 @@ from `AGENTS.md` files from the project root down to the current working
 directory, and trusted project `.codex/` directories are project/team config
 layers. `AGENTS.override.md` shadows `AGENTS.md` in the same directory. Duplicate
 Codex skill names are surfaced as conflicts instead of being silently resolved.
+
+## Desktop GUI
+
+The `gui/` directory contains a Tauri v2 + Svelte desktop first slice for item
+management. It lists memory items, shows item detail, previews
+`delete`/`disable`/`enable` actions with `expected_source_hash`, displays blocked
+previews, and applies approved preview files through `docs apply`.
+
+```text
+cd gui
+npm install
+npm run tauri dev
+```
+
+The development bridge runs `python3 -m harnex_memory.cli` with
+`PYTHONPATH=<repo>/src`. Set `HARNEX_MEMORY_PYTHON` if a different Python
+executable should be used.
