@@ -1,5 +1,5 @@
 from harnex_memory.core.classifier import classify_text, detect_agent
-from harnex_memory.core.models import DocumentKind, TargetKind
+from harnex_memory.core.models import DocumentKind, InsertionStrategy, TargetKind
 
 
 def test_classify_general_constraint_targets_codex_agents(tmp_path):
@@ -20,6 +20,25 @@ def test_classify_skill_constraint_targets_existing_skill(tmp_path):
     assert result.target == DocumentKind.SKILL
     assert result.target_kind == TargetKind.CODEX_SKILL.value
     assert result.target_path == ".codex/skills/foo/SKILL.md"
+
+
+def test_classify_existing_skill_updates_with_high_confidence(tmp_path):
+    skill_path = tmp_path / ".codex/skills/foo/SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("# Foo\n", encoding="utf-8")
+
+    result = classify_text(tmp_path, "foo skill을 업데이트해줘")
+
+    assert result.insertion_strategy == InsertionStrategy.APPEND_SECTION.value
+    assert result.confidence == "high"
+
+
+def test_classify_new_skill_creates_with_lower_confidence(tmp_path):
+    result = classify_text(tmp_path, "새 skill 문서를 추가해줘")
+
+    assert result.target == DocumentKind.SKILL
+    assert result.insertion_strategy == InsertionStrategy.CREATE_FILE.value
+    assert result.confidence == "medium"
 
 
 def test_classify_hook_constraint_targets_legacy_hook_document(tmp_path):

@@ -17,6 +17,7 @@
     showItem
   } from "$lib/api/harnexMemory";
   import { createDefaultFilters } from "$lib/stores/itemFilters";
+  import { pendingCount, pendingRecommendations } from "$lib/recommendations";
   import type {
     ApplyPayload,
     ApplyRecommendationPayload,
@@ -47,7 +48,10 @@
   let loadingPreview = false;
   let applying = false;
   let applyingRecommendation = false;
+  let batchRunning = false;
   let errorMessage = "";
+
+  $: pendingTotal = pendingCount(recommendations);
 
   function bridgeMessage(error: unknown): string {
     const bridgeError = error as Partial<BridgeError>;
@@ -229,6 +233,73 @@
       loadingRecommendationPreview = false;
     }
   }
+
+  async function refreshRecommendationsAfterBatch() {
+    const payload = await listRecommendations(projectRoot.trim());
+    recommendations = payload.recommendations;
+    selectedRecommendation =
+      payload.recommendations.find((item) => item.id === selectedRecommendation?.id) ??
+      payload.recommendations[0] ??
+      null;
+  }
+
+  async function applyAllPending() {
+    const root = projectRoot.trim();
+    if (!root || batchRunning) {
+      return;
+    }
+    const pending = pendingRecommendations(recommendations);
+    if (pending.length === 0) {
+      return;
+    }
+    batchRunning = true;
+    errorMessage = "";
+    const failures: string[] = [];
+    try {
+      for (const recommendation of pending) {
+        try {
+          await applyRecommendation(root, recommendation.id);
+        } catch (error) {
+          failures.push(`${recommendation.title}: ${bridgeMessage(error)}`);
+        }
+      }
+      await refreshRecommendationsAfterBatch();
+      if (failures.length > 0) {
+        errorMessage = `Some recommendations could not be applied:\n${failures.join("\n")}`;
+      }
+    } finally {
+      batchRunning = false;
+    }
+  }
+
+  async function dismissAllPending() {
+    const root = projectRoot.trim();
+    if (!root || batchRunning) {
+      return;
+    }
+    const pending = pendingRecommendations(recommendations);
+    if (pending.length === 0) {
+      return;
+    }
+    batchRunning = true;
+    errorMessage = "";
+    const failures: string[] = [];
+    try {
+      for (const recommendation of pending) {
+        try {
+          await dismissRecommendation(root, recommendation.id);
+        } catch (error) {
+          failures.push(`${recommendation.title}: ${bridgeMessage(error)}`);
+        }
+      }
+      await refreshRecommendationsAfterBatch();
+      if (failures.length > 0) {
+        errorMessage = `Some recommendations could not be dismissed:\n${failures.join("\n")}`;
+      }
+    } finally {
+      batchRunning = false;
+    }
+  }
 </script>
 
 <main class="app-shell">
@@ -268,6 +339,9 @@
       on:click={() => (activeTab = "recommendations")}
     >
       Recommendations
+      {#if pendingTotal > 0}
+        <span class="tab-badge" title={`${pendingTotal} pending`}>{pendingTotal}</span>
+      {/if}
     </button>
   </nav>
 
@@ -289,7 +363,11 @@
       <RecommendationList
         {recommendations}
         selectedId={selectedRecommendation?.id ?? null}
+        pendingCount={pendingTotal}
+        {batchRunning}
         on:select={(event) => selectRecommendation(event.detail)}
+        on:applyAll={applyAllPending}
+        on:dismissAll={dismissAllPending}
       />
 
       <RecommendationDetail
@@ -302,3 +380,15 @@
     {/if}
   </div>
 </main>
+
+<style>
+  .tab-badge {
+    margin-left: 0.4rem;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: var(--accent, #6b6bff);
+    color: #fff;
+  }
+</style>

@@ -2,6 +2,7 @@ export type DocumentKind = "skill" | "rule" | "hook";
 export type ItemAction = "delete" | "disable" | "enable";
 export type ItemStatus = "active" | "disabled" | "shadowed" | "conflict" | "read_only" | "deleted";
 export type RecommendationStatus = "pending" | "applied" | "dismissed" | "stale";
+export type RecommendationOrigin = "heuristic" | "llm_review";
 export type ItemFormat =
   | "markdown_section"
   | "markdown_bullet"
@@ -96,6 +97,7 @@ export interface Recommendation {
   candidate_id: string;
   status: RecommendationStatus | string;
   dismissed_reason: string;
+  origin: RecommendationOrigin | string;
   created_at: string;
   updated_at: string;
   id: string;

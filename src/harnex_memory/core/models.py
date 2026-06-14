@@ -82,6 +82,7 @@ class ItemAction(StrEnum):
 class RecommendationKind(StrEnum):
     DIRECT_CONSTRAINT = "direct_constraint"
     REPEATED_PROMPT = "repeated_prompt"
+    LLM_REVIEW = "llm_review"
 
 
 class RecommendationStatus(StrEnum):
@@ -89,6 +90,11 @@ class RecommendationStatus(StrEnum):
     APPLIED = "applied"
     DISMISSED = "dismissed"
     STALE = "stale"
+
+
+class RecommendationOrigin(StrEnum):
+    HEURISTIC = "heuristic"
+    LLM_REVIEW = "llm_review"
 
 
 @dataclass(frozen=True)
@@ -329,6 +335,7 @@ class Recommendation:
     candidate_id: str
     status: str = RecommendationStatus.PENDING.value
     dismissed_reason: str = ""
+    origin: str = RecommendationOrigin.HEURISTIC.value
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     id: str = ""
@@ -360,6 +367,7 @@ class Recommendation:
             candidate_id=str(data["candidate_id"]),
             status=str(data.get("status") or RecommendationStatus.PENDING.value),
             dismissed_reason=str(data.get("dismissed_reason") or ""),
+            origin=str(data.get("origin") or RecommendationOrigin.HEURISTIC.value),
             created_at=str(data.get("created_at") or datetime.now(UTC).isoformat()),
             updated_at=str(data.get("updated_at") or datetime.now(UTC).isoformat()),
             id=str(data.get("id") or ""),

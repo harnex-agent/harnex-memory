@@ -142,6 +142,8 @@ pub struct Recommendation {
     pub candidate_id: String,
     pub status: String,
     pub dismissed_reason: String,
+    #[serde(default)]
+    pub origin: String,
     pub created_at: String,
     pub updated_at: String,
     pub id: String,
@@ -672,5 +674,21 @@ mod tests {
                 "rec123"
             ]
         );
+    }
+
+    #[test]
+    fn recommendation_defaults_origin_when_missing() {
+        // Legacy records written before the `origin` field must still deserialize.
+        let json = r#"{
+            "kind":"repeated_prompt","title":"t","reason":"r","preview_id":"p",
+            "preview_path":"pp","target_path":"AGENTS.md","target_kind":"codex_agents",
+            "risk":"low","evidence":[],"candidate_id":"c","status":"pending",
+            "dismissed_reason":"","created_at":"","updated_at":"","id":"i",
+            "schema_version":"harnex-memory/v1"
+        }"#;
+
+        let rec: Recommendation = serde_json::from_str(json).unwrap();
+
+        assert_eq!(rec.origin, "");
     }
 }

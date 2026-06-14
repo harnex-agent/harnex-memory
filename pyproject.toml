@@ -20,6 +20,11 @@ dev = [
   "pytest>=8.0.0",
   "ruff>=0.6.0",
 ]
+# Optional local-embedding backend for semantic repeated-prompt detection.
+# Runs offline after a one-time model download; no external API calls.
+embeddings = [
+  "fastembed>=0.3",
+]
 
 [dependency-groups]
 dev = [
@@ -27,9 +32,15 @@ dev = [
   "ruff>=0.6.0",
 ]
 
+[tool.pytest.ini_options]
+# Only collect this project's tests. `external/` holds gitignored reference
+# clones (e.g. hermes-agent) whose own test suites must not be collected.
+testpaths = ["tests"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["external"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

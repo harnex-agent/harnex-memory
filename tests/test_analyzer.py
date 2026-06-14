@@ -1,4 +1,8 @@
-from harnex_memory.core.analyzer import suggest_candidates
+from harnex_memory.core.analyzer import (
+    document_already_contains,
+    is_low_value_prompt,
+    suggest_candidates,
+)
 from harnex_memory.core.models import DocumentKind, PromptRecord, TargetKind
 
 
@@ -47,6 +51,36 @@ def test_suggest_candidates_respects_custom_min_count():
 
     assert len(candidates) == 1
     assert "3회 기록되었습니다" in candidates[0].reason
+
+
+def test_suggest_candidates_skips_low_value_repeated_prompt():
+    records = [
+        PromptRecord(prompt="브라우저 도구가 안 돼", source="gui", project_root="/tmp/project"),
+        PromptRecord(prompt="브라우저 도구가 안 돼", source="gui", project_root="/tmp/project"),
+    ]
+
+    assert suggest_candidates(records) == []
+
+
+def test_is_low_value_prompt_flags_negative_and_transient_only():
+    assert is_low_value_prompt("그 브라우저 도구 doesn't work")
+    assert is_low_value_prompt("빌드하다가 에러 났어")
+    assert not is_low_value_prompt("항상 한국어로 답변해줘")
+    assert not is_low_value_prompt("pytest 실행해줘")
+
+
+def test_document_already_contains_matches_salient_prompt_text(tmp_path):
+    records = [
+        PromptRecord(prompt="pytest 실행해줘", source="adapter", project_root=str(tmp_path)),
+        PromptRecord(prompt="pytest 실행해줘", source="adapter", project_root=str(tmp_path)),
+    ]
+    [candidate] = suggest_candidates(records, project_root=tmp_path)
+
+    (tmp_path / "AGENTS.md").write_text("# 규칙\n\n- pytest 실행해줘\n", encoding="utf-8")
+    assert document_already_contains(tmp_path, candidate)
+
+    (tmp_path / "AGENTS.md").write_text("# 규칙\n\n- 다른 규칙\n", encoding="utf-8")
+    assert not document_already_contains(tmp_path, candidate)
 
 
 def test_suggest_candidates_infers_hook_target():

@@ -10,6 +10,7 @@ from harnex_memory.core.models import (
     Preview,
     Recommendation,
     RecommendationKind,
+    RecommendationOrigin,
     RecommendationStatus,
     stable_recommendation_id,
 )
@@ -55,6 +56,7 @@ def build_recommendation(
     candidate: MemoryCandidate,
     preview: Preview,
     preview_path: Path,
+    origin: str = RecommendationOrigin.HEURISTIC.value,
 ) -> Recommendation:
     target_path = candidate.target_path or project_relative_path(
         project_root,
@@ -71,6 +73,7 @@ def build_recommendation(
         risk=str(candidate.risk),
         evidence=list(candidate.evidence),
         candidate_id=candidate.id,
+        origin=origin,
         id=stable_recommendation_id(kind.value, candidate.id),
     )
 

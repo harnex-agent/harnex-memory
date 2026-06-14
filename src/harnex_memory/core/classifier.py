@@ -111,21 +111,33 @@ def classify_text(
 
     if _contains_any(normalized, SKILL_KEYWORDS):
         path = choose_skill_path(spec, project_root, text)
-        exists = path.exists()
+        relative_path = project_relative_path(project_root, path)
+        # Update-over-create ladder: choose_skill_path already prefers an existing
+        # skill (explicit name, name match, or the sole skill). Extending one is the
+        # confident path; creating a new skill file is the last resort, surfaced at
+        # lower confidence so the user reviews it before a new document is added.
+        if path.exists():
+            insertion_strategy = InsertionStrategy.APPEND_SECTION.value
+            reason = (
+                f"Skill-related wording updates the existing {agent_label} "
+                f"skill {relative_path}."
+            )
+            confidence = "high"
+        else:
+            insertion_strategy = InsertionStrategy.CREATE_FILE.value
+            reason = (
+                f"No existing {agent_label} skill matched; this creates a new skill "
+                f"document {relative_path}. Prefer updating an existing skill if one fits."
+            )
+            confidence = "medium"
         return Classification(
             target=DocumentKind.SKILL,
             target_kind=spec.skill_target_kind,
-            target_path=project_relative_path(project_root, path),
-            insertion_strategy=(
-                InsertionStrategy.APPEND_SECTION.value
-                if exists
-                else InsertionStrategy.CREATE_FILE.value
-            ),
+            target_path=relative_path,
+            insertion_strategy=insertion_strategy,
             section=f"{agent_label} Skill Guidance",
-            reason=(
-                f"Skill-related wording routes this candidate to a {agent_label} skill document."
-            ),
-            confidence="high",
+            reason=reason,
+            confidence=confidence,
         )
 
     return Classification(

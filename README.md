@@ -62,6 +62,25 @@ Recommendations are append-only status records with `pending`, `applied`,
 marks the recommendation as applied; dismissing it prevents the same suggestion
 from being recreated.
 
+Each recommendation carries an `origin` (`heuristic` by default) and is
+priority-ranked when listed (explicit user constraints first, then reviewer
+suggestions, then repeated-prompt inferences). Suggestions whose substance
+already lives in the target document — or that read as transient/negative noise
+("X doesn't work", "에러 났어") — are skipped. Applying re-validates the stored
+preview against the current document and marks the recommendation `stale` if the
+document drifted since it was generated. An optional, dependency-free review pass
+can propose extra candidates: point `HARNEX_MEMORY_REVIEWER` at a `module:factory`
+callable returning a reviewer; its candidates are staged with origin `llm_review`
+and, like every recommendation, are never auto-applied.
+
+Repeated-prompt detection groups prompts by similarity. The default groups
+prompts that are identical after normalization (zero dependencies). For semantic
+grouping that catches paraphrases across wording and language ("테스트 실행해줘"
+≈ "test 돌려줘"), install the optional `embeddings` extra and set
+`HARNEX_MEMORY_SIMILARITY=embedding`: it clusters prompts with a **local**
+sentence-embedding model (one-time model download, then offline — no external API
+call). Tune with `HARNEX_MEMORY_EMBED_MODEL` and `HARNEX_MEMORY_EMBED_THRESHOLD`.
+
 For Codex app usage, wire `scripts/codex_user_prompt_submit.py` to Codex's
 `UserPromptSubmit` hook. The hook records prompts automatically at submit time,
 so users can keep working in the Codex app without typing an explicit
@@ -107,7 +126,9 @@ item detail, previews `delete`/`disable`/`enable` actions with
 `expected_source_hash`, displays blocked previews, and applies approved preview
 files through `docs apply`. The
 Recommendations tab lists generated prompt-ingest recommendations, shows their
-diff previews, and lets the user apply or dismiss them.
+diff previews, and lets the user apply or dismiss them. The tab carries a
+pending-count badge and can apply or dismiss all pending recommendations at once,
+reporting any per-item failures.
 
 ```text
 cd gui
