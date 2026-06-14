@@ -48,6 +48,7 @@ def test_ingest_prompt_creates_repeated_prompt_recommendation_once(tmp_path):
     assert len(second_recommendations) == 1
     assert third_recommendations == []
     assert second_recommendations[0].kind == RecommendationKind.REPEATED_PROMPT.value
+    assert "2회 기록되었습니다" in second_recommendations[0].reason
     assert len(list_recommendations(tmp_path)) == 1
 
 

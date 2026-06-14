@@ -18,6 +18,37 @@ def test_suggest_candidates_detects_repeated_prompt():
     assert candidates[0].evidence == [records[0].id, records[1].id]
 
 
+def test_suggest_candidates_reason_reports_repeat_count():
+    records = [
+        PromptRecord(prompt="테스트 실행해줘", source="clarify", project_root="/tmp/project"),
+        PromptRecord(prompt=" 테스트   실행해줘 ", source="verify", project_root="/tmp/project"),
+        PromptRecord(prompt="테스트 실행해줘", source="gui", project_root="/tmp/project"),
+    ]
+
+    candidates = suggest_candidates(records)
+
+    assert len(candidates) == 1
+    assert candidates[0].reason.startswith("같거나 매우 유사한 프롬프트가 3회 기록되었습니다.")
+    assert len(candidates[0].evidence) == 3
+
+
+def test_suggest_candidates_respects_custom_min_count():
+    records = [
+        PromptRecord(prompt="배포 스크립트 정리해줘", source="clarify", project_root="/tmp/project"),
+        PromptRecord(prompt="배포 스크립트 정리해줘", source="verify", project_root="/tmp/project"),
+    ]
+
+    assert suggest_candidates(records, min_count=3) == []
+
+    records.append(
+        PromptRecord(prompt="배포 스크립트 정리해줘", source="gui", project_root="/tmp/project")
+    )
+    candidates = suggest_candidates(records, min_count=3)
+
+    assert len(candidates) == 1
+    assert "3회 기록되었습니다" in candidates[0].reason
+
+
 def test_suggest_candidates_infers_hook_target():
     records = [
         PromptRecord(prompt="pre-commit hook 추가해줘", source="gui", project_root="/tmp/project"),

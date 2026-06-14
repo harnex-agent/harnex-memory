@@ -606,4 +606,71 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn recommendations_show_args_are_fixed() {
+        let args = CliOperation::RecommendationsShow {
+            project_root: PathBuf::from("/tmp/project"),
+            recommendation_id: "rec123".to_string(),
+        }
+        .args();
+
+        assert_eq!(
+            args,
+            [
+                "recommendations",
+                "show",
+                "--project-root",
+                "/tmp/project",
+                "--recommendation-id",
+                "rec123"
+            ]
+        );
+    }
+
+    #[test]
+    fn recommendations_dismiss_args_include_reason_when_available() {
+        let args = CliOperation::RecommendationsDismiss {
+            project_root: PathBuf::from("/tmp/project"),
+            recommendation_id: "rec123".to_string(),
+            reason: Some("too noisy".to_string()),
+        }
+        .args();
+
+        assert_eq!(
+            args,
+            [
+                "recommendations",
+                "dismiss",
+                "--project-root",
+                "/tmp/project",
+                "--recommendation-id",
+                "rec123",
+                "--reason",
+                "too noisy"
+            ]
+        );
+    }
+
+    #[test]
+    fn recommendations_dismiss_args_omit_reason_when_absent() {
+        let args = CliOperation::RecommendationsDismiss {
+            project_root: PathBuf::from("/tmp/project"),
+            recommendation_id: "rec123".to_string(),
+            reason: None,
+        }
+        .args();
+
+        assert_eq!(
+            args,
+            [
+                "recommendations",
+                "dismiss",
+                "--project-root",
+                "/tmp/project",
+                "--recommendation-id",
+                "rec123"
+            ]
+        );
+    }
 }
