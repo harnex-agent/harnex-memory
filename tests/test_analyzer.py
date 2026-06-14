@@ -45,3 +45,58 @@ def test_suggest_candidates_infers_codex_skill_target(tmp_path):
     assert candidates[0].target == DocumentKind.SKILL
     assert candidates[0].target_kind == TargetKind.CODEX_SKILL.value
     assert candidates[0].target_path == ".codex/skills/foo/SKILL.md"
+
+
+def test_suggest_candidates_splits_repeated_prompt_by_agent_source(tmp_path):
+    records = [
+        PromptRecord(
+            prompt="항상 한국어로 답변",
+            source="codex-user-prompt-submit",
+            project_root=str(tmp_path),
+        ),
+        PromptRecord(
+            prompt="항상 한국어로 답변",
+            source="codex-user-prompt-submit",
+            project_root=str(tmp_path),
+        ),
+        PromptRecord(
+            prompt="항상 한국어로 답변",
+            source="claude-user-prompt-submit",
+            project_root=str(tmp_path),
+        ),
+        PromptRecord(
+            prompt="항상 한국어로 답변",
+            source="claude-user-prompt-submit",
+            project_root=str(tmp_path),
+        ),
+    ]
+
+    candidates = suggest_candidates(records, project_root=tmp_path)
+
+    target_paths = {candidate.target_path for candidate in candidates}
+    assert target_paths == {"AGENTS.md", "CLAUDE.md"}
+    assert {candidate.target_kind for candidate in candidates} == {
+        TargetKind.CODEX_AGENTS.value,
+        TargetKind.CLAUDE_AGENTS.value,
+    }
+
+
+def test_suggest_candidates_claude_source_alone_targets_claude(tmp_path):
+    records = [
+        PromptRecord(
+            prompt="항상 테스트 먼저",
+            source="claude-user-prompt-submit",
+            project_root=str(tmp_path),
+        ),
+        PromptRecord(
+            prompt="항상 테스트 먼저",
+            source="claude-user-prompt-submit",
+            project_root=str(tmp_path),
+        ),
+    ]
+
+    candidates = suggest_candidates(records, project_root=tmp_path)
+
+    assert len(candidates) == 1
+    assert candidates[0].target_kind == TargetKind.CLAUDE_AGENTS.value
+    assert candidates[0].target_path == "CLAUDE.md"

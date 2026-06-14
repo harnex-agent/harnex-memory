@@ -1,4 +1,5 @@
 .venv/
+.claude/
 .codex/worktree/
 .pytest_cache/
 .ruff_cache/

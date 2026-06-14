@@ -194,6 +194,29 @@ button:disabled {
   white-space: pre-wrap;
 }
 
+.workspace-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 18px 0;
+}
+
+.workspace-tabs button {
+  min-height: 32px;
+  border: 1px solid #cbd3cd;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #435048;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.workspace-tabs button.active {
+  border-color: #1f6f68;
+  background: #e8f3ef;
+  color: #15524c;
+}
+
 .workspace-grid {
   display: grid;
   grid-template-columns: minmax(520px, 0.98fr) minmax(420px, 1fr);
@@ -277,14 +300,39 @@ button:disabled {
 }
 
 .item-heading,
-.item-row {
+.item-row,
+.recommendation-heading,
+.recommendation-row {
   display: grid;
-  grid-template-columns: 62px 54px minmax(86px, 0.8fr) minmax(150px, 1.3fr) minmax(150px, 1fr) 58px;
   align-items: center;
   gap: 8px;
 }
 
+.item-heading,
+.item-row {
+  grid-template-columns: 62px 54px 60px minmax(86px, 0.8fr) minmax(150px, 1.3fr) minmax(150px, 1fr) 58px;
+}
+
+.recommendation-heading,
+.recommendation-row {
+  grid-template-columns: 62px minmax(90px, 0.8fr) minmax(140px, 1fr) minmax(180px, 1.4fr) 58px;
+}
+
 .item-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 34px;
+  padding: 0 12px;
+  border-bottom: 1px solid #e2e5df;
+  background: #fafbf8;
+  color: #65736b;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.recommendation-heading {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -309,20 +357,36 @@ button:disabled {
   text-align: left;
 }
 
+.recommendation-row {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 1px solid #eef0eb;
+  background: transparent;
+  color: #24302b;
+  text-align: left;
+}
+
 .item-row:hover,
-.item-row.selected {
+.item-row.selected,
+.recommendation-row:hover,
+.recommendation-row.selected {
   background: #edf5f1;
 }
 
 .item-row > span,
-.item-row strong {
+.item-row strong,
+.recommendation-row > span,
+.recommendation-row strong {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.item-row strong {
+.item-row strong,
+.recommendation-row strong {
   font-size: 13px;
 }
 
@@ -469,6 +533,12 @@ h1 {
   min-height: 57px;
 }
 
+.compact-title {
+  min-height: 0;
+  padding: 0;
+  border-bottom: 0;
+}
+
 .pane-title div {
   display: flex;
   align-items: center;
@@ -565,6 +635,19 @@ h1 {
   padding: 10px;
   background: #111a1f;
   color: #e7eee9;
+}
+
+.recommendation-detail {
+  grid-template-rows: auto auto auto auto 1fr auto;
+}
+
+.recommendation-metadata {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.recommendation-diffs {
+  min-height: 0;
+  overflow: auto;
 }
 
 .empty-state {

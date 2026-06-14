@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from hashlib import sha256
 from pathlib import Path
 
-from harnex_memory.core.classifier import Classification, classify_text
+from harnex_memory.core.classifier import (
+    HOOK_KEYWORDS,
+    SKILL_KEYWORDS,
+    Classification,
+    classify_text,
+    detect_agent,
+)
 from harnex_memory.core.models import (
     ChangeRisk,
     DocumentKind,
@@ -13,26 +20,61 @@ from harnex_memory.core.models import (
 )
 from harnex_memory.core.prompt_store import normalize_prompt
 
+DIRECT_CONSTRAINT_KEYWORDS = (
+    "always",
+    "never",
+    "must",
+    "whenever",
+    "prefer",
+    "do not",
+    "don't",
+    "항상",
+    "앞으로",
+    "매번",
+    "반드시",
+    "기억해",
+    "기억해줘",
+    "규칙",
+    "원칙",
+)
+DIRECT_CONSTRAINT_TARGET_KEYWORDS = (*HOOK_KEYWORDS, *SKILL_KEYWORDS)
+DIRECT_CONSTRAINT_ACTION_KEYWORDS = (
+    "add",
+    "record",
+    "remember",
+    "update",
+    "추가",
+    "기록",
+    "저장",
+    "반영",
+    "업데이트",
+)
+
 
 def suggest_candidates(
     records: list[PromptRecord],
     min_count: int = 2,
     project_root: Path | None = None,
 ) -> list[MemoryCandidate]:
-    grouped: dict[str, list[PromptRecord]] = defaultdict(list)
+    # Group by (agent, normalized prompt) so a prompt repeated under both Codex and
+    # Claude produces a candidate for each agent's document.
+    grouped: dict[tuple[str, str], list[PromptRecord]] = defaultdict(list)
     for record in records:
         normalized = normalize_prompt(record.prompt)
-        if normalized:
-            grouped[normalized].append(record)
+        if not normalized:
+            continue
+        root = project_root or Path(record.project_root)
+        agent = detect_agent(root, text=record.prompt, source=record.source)
+        grouped[(agent, normalized)].append(record)
 
     candidates: list[MemoryCandidate] = []
     seen: set[tuple[str, str]] = set()
-    for _normalized, group in sorted(grouped.items(), key=lambda item: item[0]):
+    for (agent, _normalized), group in sorted(grouped.items(), key=lambda item: item[0]):
         if len(group) < min_count:
             continue
         first_prompt = group[0].prompt.strip()
         root = project_root or Path(group[0].project_root)
-        classification = classify_text(root, first_prompt)
+        classification = classify_text(root, first_prompt, agent=agent)
         dedupe_key = (normalize_prompt(first_prompt), classification.target_path)
         if dedupe_key in seen:
             continue
@@ -54,6 +96,7 @@ def suggest_candidates(
                 target_path=classification.target_path,
                 insertion_strategy=classification.insertion_strategy,
                 section=classification.section,
+                id=stable_prompt_candidate_id(first_prompt, classification.target_path),
             )
         )
     return candidates
@@ -67,9 +110,10 @@ def candidate_from_constraint(
     project_root: Path,
     constraint: str,
     source: str = "constraint-preview",
+    agent: str | None = None,
 ) -> MemoryCandidate:
     text = constraint.strip()
-    classification = classify_text(project_root, text)
+    classification = classify_text(project_root, text, source=source, agent=agent)
     return MemoryCandidate(
         target=classification.target,
         title=f"사용자 제약: {summarize_prompt(text)}",
@@ -81,6 +125,16 @@ def candidate_from_constraint(
         target_path=classification.target_path,
         insertion_strategy=classification.insertion_strategy,
         section=classification.section,
+    )
+
+
+def is_direct_constraint_prompt(prompt: str) -> bool:
+    normalized = normalize_prompt(prompt)
+    if _contains_any(normalized, DIRECT_CONSTRAINT_KEYWORDS):
+        return True
+    return _contains_any(normalized, DIRECT_CONSTRAINT_TARGET_KEYWORDS) and _contains_any(
+        normalized,
+        DIRECT_CONSTRAINT_ACTION_KEYWORDS,
     )
 
 
@@ -106,3 +160,15 @@ def render_constraint_content(constraint: str, classification: Classification) -
         return f"- {constraint.strip()}\n"
     heading = classification.section or "Memory Candidate"
     return f"## {heading}\n\n- {constraint.strip()}\n"
+
+
+def stable_prompt_candidate_id(prompt: str, target_path: str) -> str:
+    digest = sha256()
+    digest.update(normalize_prompt(prompt).encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(target_path.encode("utf-8"))
+    return digest.hexdigest()[:16]
+
+
+def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
+    return any(keyword in text for keyword in keywords)

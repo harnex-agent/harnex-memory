@@ -62,6 +62,37 @@ def test_list_document_statuses_detects_codex_flat_skill_file(tmp_path):
     )
 
 
+def test_list_document_statuses_detects_claude_agents(tmp_path):
+    (tmp_path / "CLAUDE.md").write_text("# Project Instructions\n", encoding="utf-8")
+
+    statuses = list_document_statuses(tmp_path)
+
+    agents = [
+        status for status in statuses if status.target_kind == TargetKind.CLAUDE_AGENTS.value
+    ]
+    assert len(agents) == 1
+    assert agents[0].kind == DocumentKind.RULE
+    assert agents[0].agent == "claude"
+    assert agents[0].path.endswith("CLAUDE.md")
+    assert agents[0].exists
+
+
+def test_list_document_statuses_detects_claude_skill_directory_file(tmp_path):
+    skill_path = tmp_path / ".claude/skills/foo/SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("# Foo\n", encoding="utf-8")
+
+    statuses = list_document_statuses(tmp_path)
+
+    assert any(
+        status.target_kind == TargetKind.CLAUDE_SKILL.value
+        and status.path.endswith(".claude/skills/foo/SKILL.md")
+        and status.exists
+        and status.agent == "claude"
+        for status in statuses
+    )
+
+
 def test_read_document_returns_template_when_missing(tmp_path):
     assert read_document(tmp_path, DocumentKind.RULE) == "# Rules\n\n"
 

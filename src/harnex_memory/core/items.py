@@ -5,7 +5,7 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
-from harnex_memory.core.codex_docs import discover_codex_skill_paths
+from harnex_memory.core.agent_docs import AgentSpec, discover_skill_paths, iter_agent_specs
 from harnex_memory.core.models import (
     SCHEMA_VERSION,
     DocumentKind,
@@ -48,7 +48,7 @@ def list_memory_items(
 
     items.extend(_list_legacy_markdown_items(root))
     items.extend(_list_agents_items(root, cwd))
-    items.extend(_list_codex_skill_items(root))
+    items.extend(_list_skill_items(root))
     items.extend(read_disabled_items(root))
 
     if not include_readonly:
@@ -147,83 +147,119 @@ def _list_legacy_markdown_items(project_root: Path) -> list[MemoryItem]:
 def _list_agents_items(project_root: Path, cwd: str | Path | None) -> list[MemoryItem]:
     items: list[MemoryItem] = []
     for directory in _project_directories(project_root, cwd):
-        agents_path = directory / "AGENTS.md"
-        override_path = directory / "AGENTS.override.md"
         scope = (
             MemoryScope.PROJECT_ROOT.value
             if directory == project_root
             else MemoryScope.NESTED_PROJECT.value
         )
-        if agents_path.exists():
-            status = (
-                ItemStatus.SHADOWED.value
-                if override_path.exists()
-                else ItemStatus.ACTIVE.value
-            )
-            reason = (
-                "AGENTS.override.md in the same directory shadows AGENTS.md."
-                if status == ItemStatus.SHADOWED.value
-                else ""
-            )
-            items.extend(
+        for spec in iter_agent_specs():
+            items.extend(_list_spec_agents_items(project_root, directory, scope, spec))
+    return items
+
+
+def _list_spec_agents_items(
+    project_root: Path,
+    directory: Path,
+    scope: str,
+    spec: AgentSpec,
+) -> list[MemoryItem]:
+    items: list[MemoryItem] = []
+    agents_path = directory / spec.agents_filename
+    override_path = directory / spec.override_filename if spec.override_filename else None
+    has_override = override_path is not None and override_path.exists()
+
+    if agents_path.exists():
+        status = ItemStatus.SHADOWED.value if has_override else ItemStatus.ACTIVE.value
+        reason = (
+            f"{spec.override_filename} in the same directory shadows {spec.agents_filename}."
+            if has_override
+            else ""
+        )
+        items.extend(
+            _with_agent(
                 _parse_markdown_items(
                     project_root=project_root,
                     path=agents_path,
                     document_kind=DocumentKind.RULE,
-                    target_kind=TargetKind.CODEX_AGENTS.value,
+                    target_kind=spec.agents_target_kind,
                     scope=scope,
                     status=status,
                     reason=reason,
                     item_format=None,
-                )
+                ),
+                spec.name,
             )
-        if override_path.exists():
-            items.extend(
+        )
+    if has_override and override_path is not None:
+        items.extend(
+            _with_agent(
                 _parse_markdown_items(
                     project_root=project_root,
                     path=override_path,
                     document_kind=DocumentKind.RULE,
-                    target_kind=TargetKind.CODEX_AGENTS.value,
+                    target_kind=spec.agents_target_kind,
                     scope=scope,
                     status=ItemStatus.ACTIVE.value,
                     reason="",
                     item_format=None,
-                )
+                ),
+                spec.name,
             )
+        )
     return items
 
 
-def _list_codex_skill_items(project_root: Path) -> list[MemoryItem]:
+def _list_skill_items(project_root: Path) -> list[MemoryItem]:
     items: list[MemoryItem] = []
-    for path in discover_codex_skill_paths(project_root):
-        items.extend(
-            _parse_markdown_items(
-                project_root=project_root,
-                path=path,
-                document_kind=DocumentKind.SKILL,
-                target_kind=TargetKind.CODEX_SKILL.value,
-                scope=MemoryScope.PROJECT_CODEX.value,
-                status=ItemStatus.ACTIVE.value,
-                reason="",
-                item_format=ItemFormat.SKILL_DOCUMENT.value,
-            )
-        )
+    for spec in iter_agent_specs():
+        items.extend(_list_agent_skill_items(project_root, spec))
 
-    title_counts: dict[str, int] = {}
+    # Scope the conflict check to (agent, title) so Codex `foo` and Claude `foo`
+    # are not treated as duplicates of each other.
+    title_counts: dict[tuple[str, str], int] = {}
     for item in items:
-        key = item.title.casefold()
+        key = (item.agent, item.title.casefold())
         title_counts[key] = title_counts.get(key, 0) + 1
 
     return [
         replace(
             item,
             status=ItemStatus.CONFLICT.value,
-            reason="Another Codex skill with the same name was discovered.",
+            reason=(
+                f"Another {item.agent.capitalize()} skill with the same name was discovered."
+            ),
         )
-        if title_counts[item.title.casefold()] > 1
+        if title_counts[(item.agent, item.title.casefold())] > 1
         else item
         for item in items
     ]
+
+
+def _list_agent_skill_items(project_root: Path, spec: AgentSpec) -> list[MemoryItem]:
+    items: list[MemoryItem] = []
+    for path in discover_skill_paths(spec, project_root):
+        items.extend(
+            _with_agent(
+                _parse_markdown_items(
+                    project_root=project_root,
+                    path=path,
+                    document_kind=DocumentKind.SKILL,
+                    target_kind=spec.skill_target_kind,
+                    scope=spec.scope,
+                    status=ItemStatus.ACTIVE.value,
+                    reason="",
+                    item_format=ItemFormat.SKILL_DOCUMENT.value,
+                ),
+                spec.name,
+            )
+        )
+    return items
+
+
+def _with_agent(items: list[MemoryItem], agent: str) -> list[MemoryItem]:
+    if not agent:
+        return items
+    return [replace(item, agent=agent) for item in items]
 
 
 def _parse_markdown_items(

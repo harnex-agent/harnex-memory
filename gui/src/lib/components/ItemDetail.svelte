@@ -76,6 +76,10 @@
         <dd>{item.scope}</dd>
       </div>
       <div>
+        <dt>Agent</dt>
+        <dd>{item.agent || "—"}</dd>
+      </div>
+      <div>
         <dt>Target</dt>
         <dd>{item.target_kind}</dd>
       </div>

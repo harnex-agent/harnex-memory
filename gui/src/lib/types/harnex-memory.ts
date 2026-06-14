@@ -1,6 +1,7 @@
 export type DocumentKind = "skill" | "rule" | "hook";
 export type ItemAction = "delete" | "disable" | "enable";
 export type ItemStatus = "active" | "disabled" | "shadowed" | "conflict" | "read_only" | "deleted";
+export type RecommendationStatus = "pending" | "applied" | "dismissed" | "stale";
 export type ItemFormat =
   | "markdown_section"
   | "markdown_bullet"
@@ -26,6 +27,7 @@ export interface MemoryItem {
   span: TextSpan | null;
   source_hash: string;
   reason: string;
+  agent: string;
   id: string;
   schema_version: string;
 }
@@ -79,6 +81,43 @@ export interface PreviewPayload {
 
 export interface ApplyPayload {
   apply_result_path: string;
+}
+
+export interface Recommendation {
+  kind: string;
+  title: string;
+  reason: string;
+  preview_id: string;
+  preview_path: string;
+  target_path: string;
+  target_kind: string;
+  risk: "low" | "medium" | "high" | string;
+  evidence: string[];
+  candidate_id: string;
+  status: RecommendationStatus | string;
+  dismissed_reason: string;
+  created_at: string;
+  updated_at: string;
+  id: string;
+  schema_version: string;
+}
+
+export interface RecommendationsPayload {
+  recommendations: Recommendation[];
+}
+
+export interface RecommendationPreviewPayload {
+  recommendation: Recommendation;
+  preview: Preview;
+}
+
+export interface RecommendationPayload {
+  recommendation: Recommendation;
+}
+
+export interface ApplyRecommendationPayload {
+  apply_result_path: string;
+  recommendation: Recommendation;
 }
 
 export interface ProjectRootSelection {

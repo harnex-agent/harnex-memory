@@ -117,3 +117,47 @@ def test_duplicate_codex_skill_names_are_marked_conflict(tmp_path):
 
     assert len(items) == 2
     assert {item.status for item in items} == {ItemStatus.CONFLICT.value}
+
+
+def test_list_memory_items_marks_claude_agent_items(tmp_path):
+    (tmp_path / "CLAUDE.md").write_text("# Rules\n\n- Answer in Korean\n", encoding="utf-8")
+
+    items = list_memory_items(tmp_path)
+
+    claude_item = next(item for item in items if item.title == "Answer in Korean")
+    assert claude_item.target_kind == TargetKind.CLAUDE_AGENTS.value
+    assert claude_item.agent == "claude"
+    assert claude_item.status == ItemStatus.ACTIVE.value
+
+
+def test_claude_agents_has_no_override_shadowing(tmp_path):
+    (tmp_path / "CLAUDE.md").write_text("# Rules\n\n- Base guidance\n", encoding="utf-8")
+    (tmp_path / "CLAUDE.override.md").write_text(
+        "# Rules\n\n- Override guidance\n", encoding="utf-8"
+    )
+
+    items = list_memory_items(tmp_path)
+
+    base = next(item for item in items if item.title == "Base guidance")
+    # Claude has no override-file concept: base stays active and the override file is ignored.
+    assert base.status == ItemStatus.ACTIVE.value
+    assert all(item.title != "Override guidance" for item in items)
+
+
+def test_codex_and_claude_same_skill_name_do_not_conflict(tmp_path):
+    codex_skill = tmp_path / ".codex/skills/foo/SKILL.md"
+    claude_skill = tmp_path / ".claude/skills/foo/SKILL.md"
+    codex_skill.parent.mkdir(parents=True)
+    claude_skill.parent.mkdir(parents=True)
+    codex_skill.write_text("# Foo\n\nCodex instructions\n", encoding="utf-8")
+    claude_skill.write_text("# Foo\n\nClaude instructions\n", encoding="utf-8")
+
+    items = [
+        item
+        for item in list_memory_items(tmp_path)
+        if item.target_kind in {TargetKind.CODEX_SKILL.value, TargetKind.CLAUDE_SKILL.value}
+    ]
+
+    assert len(items) == 2
+    assert {item.status for item in items} == {ItemStatus.ACTIVE.value}
+    assert {item.agent for item in items} == {"codex", "claude"}

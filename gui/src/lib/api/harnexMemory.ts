@@ -1,11 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   ApplyPayload,
+  ApplyRecommendationPayload,
   ItemAction,
   ItemPayload,
   ItemsPayload,
   PreviewPayload,
-  ProjectRootSelection
+  ProjectRootSelection,
+  RecommendationPayload,
+  RecommendationPreviewPayload,
+  RecommendationsPayload,
+  RecommendationStatus
 } from "$lib/types/harnex-memory";
 
 export function selectProjectRoot(): Promise<ProjectRootSelection> {
@@ -48,5 +53,47 @@ export function applyPreview(projectRoot: string, previewPath: string): Promise<
   return invoke<ApplyPayload>("apply_preview", {
     projectRoot,
     previewPath
+  });
+}
+
+export function listRecommendations(
+  projectRoot: string,
+  status?: RecommendationStatus | string
+): Promise<RecommendationsPayload> {
+  return invoke<RecommendationsPayload>("list_recommendations", {
+    projectRoot,
+    status: status || null
+  });
+}
+
+export function showRecommendation(
+  projectRoot: string,
+  recommendationId: string
+): Promise<RecommendationPreviewPayload> {
+  return invoke<RecommendationPreviewPayload>("show_recommendation", {
+    projectRoot,
+    recommendationId
+  });
+}
+
+export function applyRecommendation(
+  projectRoot: string,
+  recommendationId: string
+): Promise<ApplyRecommendationPayload> {
+  return invoke<ApplyRecommendationPayload>("apply_recommendation", {
+    projectRoot,
+    recommendationId
+  });
+}
+
+export function dismissRecommendation(
+  projectRoot: string,
+  recommendationId: string,
+  reason = ""
+): Promise<RecommendationPayload> {
+  return invoke<RecommendationPayload>("dismiss_recommendation", {
+    projectRoot,
+    recommendationId,
+    reason: reason || null
   });
 }

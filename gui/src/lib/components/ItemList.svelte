@@ -16,6 +16,7 @@
 
   const kindOptions = ["skill", "rule", "hook"] as const;
   const statusOptions = ["active", "disabled", "shadowed", "conflict", "read_only"] as const;
+  const agentOptions = ["codex", "claude"] as const;
 
   $: visibleItems = filterItems(items, filters);
 
@@ -23,14 +24,14 @@
     dispatch("filtersChange", { ...filters, query });
   }
 
-  function toggleSet(kind: "kinds" | "statuses", value: string) {
-    const next = new Set(filters[kind]);
+  function toggleSet(group: "kinds" | "statuses" | "agents", value: string) {
+    const next = new Set(filters[group]);
     if (next.has(value)) {
       next.delete(value);
     } else {
       next.add(value);
     }
-    dispatch("filtersChange", { ...filters, [kind]: next });
+    dispatch("filtersChange", { ...filters, [group]: next });
   }
 
   function statusIcon(status: string) {
@@ -88,6 +89,19 @@
           </button>
         {/each}
       </div>
+
+      <div class="segmented agent-filters" aria-label="Agent filters">
+        {#each agentOptions as agent}
+          <button
+            class:active={filters.agents.has(agent)}
+            type="button"
+            title={agent}
+            on:click={() => toggleSet("agents", agent)}
+          >
+            {agent}
+          </button>
+        {/each}
+      </div>
     </div>
   </div>
 
@@ -95,6 +109,7 @@
     <div class="item-heading">
       <span>Status</span>
       <span>Kind</span>
+      <span>Agent</span>
       <span>Scope</span>
       <span>Title</span>
       <span>Path</span>
@@ -117,6 +132,7 @@
             <Icon size={15} />
           </span>
           <span>{item.document_kind}</span>
+          <span class="agent-cell" title={item.agent || "unassigned"}>{item.agent || "—"}</span>
           <span title={item.scope}>{item.scope}</span>
           <strong title={item.title}>{item.title}</strong>
           <span title={item.path}>{item.path}</span>

@@ -59,6 +59,10 @@ def prompt_records_path(project_root: Path) -> Path:
     return ensure_inside_project(project_root, ".harnex/memory/prompt-records.jsonl")
 
 
+def recommendations_path(project_root: Path) -> Path:
+    return ensure_inside_project(project_root, ".harnex/memory/recommendations.jsonl")
+
+
 def disabled_items_path(project_root: Path) -> Path:
     return ensure_inside_project(project_root, ".harnex/memory/disabled-items.json")
 

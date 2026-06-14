@@ -57,6 +57,8 @@ pub struct MemoryItem {
     pub span: Option<TextSpan>,
     pub source_hash: String,
     pub reason: String,
+    #[serde(default)]
+    pub agent: String,
     pub id: String,
     pub schema_version: String,
 }
@@ -125,6 +127,49 @@ pub struct ApplyPayload {
     pub apply_result_path: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Recommendation {
+    pub kind: String,
+    pub title: String,
+    pub reason: String,
+    pub preview_id: String,
+    pub preview_path: String,
+    pub target_path: String,
+    pub target_kind: String,
+    pub risk: String,
+    #[serde(default)]
+    pub evidence: Vec<String>,
+    pub candidate_id: String,
+    pub status: String,
+    pub dismissed_reason: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub id: String,
+    pub schema_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationsPayload {
+    pub recommendations: Vec<Recommendation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationPayload {
+    pub recommendation: Recommendation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationPreviewPayload {
+    pub recommendation: Recommendation,
+    pub preview: Preview,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApplyRecommendationPayload {
+    pub apply_result_path: String,
+    pub recommendation: Recommendation,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliOperation {
     ItemsList {
@@ -145,6 +190,23 @@ pub enum CliOperation {
     DocsApply {
         project_root: PathBuf,
         preview_path: PathBuf,
+    },
+    RecommendationsList {
+        project_root: PathBuf,
+        status: Option<String>,
+    },
+    RecommendationsShow {
+        project_root: PathBuf,
+        recommendation_id: String,
+    },
+    RecommendationsApply {
+        project_root: PathBuf,
+        recommendation_id: String,
+    },
+    RecommendationsDismiss {
+        project_root: PathBuf,
+        recommendation_id: String,
+        reason: Option<String>,
     },
 }
 
@@ -215,6 +277,63 @@ impl CliOperation {
                 "--preview".to_string(),
                 path_arg(preview_path),
             ],
+            Self::RecommendationsList {
+                project_root,
+                status,
+            } => {
+                let mut args = vec![
+                    "recommendations".to_string(),
+                    "list".to_string(),
+                    "--project-root".to_string(),
+                    path_arg(project_root),
+                ];
+                if let Some(status) = status {
+                    args.push("--status".to_string());
+                    args.push(status.clone());
+                }
+                args
+            }
+            Self::RecommendationsShow {
+                project_root,
+                recommendation_id,
+            } => vec![
+                "recommendations".to_string(),
+                "show".to_string(),
+                "--project-root".to_string(),
+                path_arg(project_root),
+                "--recommendation-id".to_string(),
+                recommendation_id.clone(),
+            ],
+            Self::RecommendationsApply {
+                project_root,
+                recommendation_id,
+            } => vec![
+                "recommendations".to_string(),
+                "apply".to_string(),
+                "--project-root".to_string(),
+                path_arg(project_root),
+                "--recommendation-id".to_string(),
+                recommendation_id.clone(),
+            ],
+            Self::RecommendationsDismiss {
+                project_root,
+                recommendation_id,
+                reason,
+            } => {
+                let mut args = vec![
+                    "recommendations".to_string(),
+                    "dismiss".to_string(),
+                    "--project-root".to_string(),
+                    path_arg(project_root),
+                    "--recommendation-id".to_string(),
+                    recommendation_id.clone(),
+                ];
+                if let Some(reason) = reason {
+                    args.push("--reason".to_string());
+                    args.push(reason.clone());
+                }
+                args
+            }
         }
     }
 }
@@ -226,7 +345,9 @@ pub fn run_cli_json<T: DeserializeOwned>(operation: CliOperation) -> Result<T, B
         .env("PYTHONPATH", python_path()?)
         .current_dir(repo_root())
         .output()
-        .map_err(|error| BridgeError::new("spawn_failed", format!("Failed to run Python CLI: {error}")))?;
+        .map_err(|error| {
+            BridgeError::new("spawn_failed", format!("Failed to run Python CLI: {error}"))
+        })?;
 
     if !output.status.success() {
         return Err(BridgeError::with_stderr(
@@ -259,14 +380,19 @@ pub fn validate_project_root(value: &str) -> Result<PathBuf, BridgeError> {
             format!("Project root is not a directory: {}", path.display()),
         ));
     }
-    path.canonicalize()
-        .map_err(|error| BridgeError::new("invalid_project_root", format!("Project root cannot be resolved: {error}")))
+    path.canonicalize().map_err(|error| {
+        BridgeError::new(
+            "invalid_project_root",
+            format!("Project root cannot be resolved: {error}"),
+        )
+    })
 }
 
-pub fn validate_optional_path(value: Option<String>, name: &str) -> Result<Option<PathBuf>, BridgeError> {
-    value
-        .map(|value| normalize_path(&value, name))
-        .transpose()
+pub fn validate_optional_path(
+    value: Option<String>,
+    name: &str,
+) -> Result<Option<PathBuf>, BridgeError> {
+    value.map(|value| normalize_path(&value, name)).transpose()
 }
 
 pub fn validate_existing_file(value: &str, name: &str) -> Result<PathBuf, BridgeError> {
@@ -283,8 +409,12 @@ pub fn validate_existing_file(value: &str, name: &str) -> Result<PathBuf, Bridge
             format!("{name} is not a file: {}", path.display()),
         ));
     }
-    path.canonicalize()
-        .map_err(|error| BridgeError::new("invalid_input", format!("{name} cannot be resolved: {error}")))
+    path.canonicalize().map_err(|error| {
+        BridgeError::new(
+            "invalid_input",
+            format!("{name} cannot be resolved: {error}"),
+        )
+    })
 }
 
 pub fn validate_item_id(value: &str) -> Result<String, BridgeError> {
@@ -307,7 +437,10 @@ pub fn validate_item_id(value: &str) -> Result<String, BridgeError> {
 fn normalize_path(value: &str, name: &str) -> Result<PathBuf, BridgeError> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
-        return Err(BridgeError::new("invalid_input", format!("{name} is required")));
+        return Err(BridgeError::new(
+            "invalid_input",
+            format!("{name} is required"),
+        ));
     }
     Ok(expand_home(trimmed))
 }
@@ -329,7 +462,8 @@ fn home_dir() -> Option<PathBuf> {
 }
 
 fn python_command() -> Result<Command, BridgeError> {
-    let executable = env::var_os("HARNEX_MEMORY_PYTHON").unwrap_or_else(|| OsString::from("python3"));
+    let executable =
+        env::var_os("HARNEX_MEMORY_PYTHON").unwrap_or_else(|| OsString::from("python3"));
     let mut command = Command::new(executable);
     command.env_remove("PYTHONHOME");
     Ok(command)
@@ -340,7 +474,8 @@ fn python_path() -> Result<OsString, BridgeError> {
     if let Some(existing) = env::var_os("PYTHONPATH") {
         entries.extend(env::split_paths(&existing));
     }
-    env::join_paths(entries).map_err(|error| BridgeError::new("environment", format!("Invalid PYTHONPATH: {error}")))
+    env::join_paths(entries)
+        .map_err(|error| BridgeError::new("environment", format!("Invalid PYTHONPATH: {error}")))
 }
 
 fn repo_root() -> PathBuf {
@@ -426,6 +561,48 @@ mod tests {
                 "/tmp/project",
                 "--preview",
                 "/tmp/project/.harnex/memory/previews/preview.json"
+            ]
+        );
+    }
+
+    #[test]
+    fn recommendations_list_args_include_status_when_available() {
+        let args = CliOperation::RecommendationsList {
+            project_root: PathBuf::from("/tmp/project"),
+            status: Some("pending".to_string()),
+        }
+        .args();
+
+        assert_eq!(
+            args,
+            [
+                "recommendations",
+                "list",
+                "--project-root",
+                "/tmp/project",
+                "--status",
+                "pending"
+            ]
+        );
+    }
+
+    #[test]
+    fn recommendations_apply_args_are_fixed() {
+        let args = CliOperation::RecommendationsApply {
+            project_root: PathBuf::from("/tmp/project"),
+            recommendation_id: "rec123".to_string(),
+        }
+        .args();
+
+        assert_eq!(
+            args,
+            [
+                "recommendations",
+                "apply",
+                "--project-root",
+                "/tmp/project",
+                "--recommendation-id",
+                "rec123"
             ]
         );
     }

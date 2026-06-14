@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::harnex_memory::{
     run_cli_json, validate_existing_file, validate_item_id, validate_optional_path,
-    validate_project_root, ApplyPayload, BridgeError, CliOperation, ItemPayload, ItemsPayload,
-    PreviewPayload,
+    validate_project_root, ApplyPayload, ApplyRecommendationPayload, BridgeError, CliOperation,
+    ItemPayload, ItemsPayload, PreviewPayload, RecommendationPayload, RecommendationPreviewPayload,
+    RecommendationsPayload,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -91,12 +92,71 @@ pub fn preview_item_action(
 }
 
 #[tauri::command]
-pub fn apply_preview(project_root: String, preview_path: String) -> Result<ApplyPayload, BridgeError> {
+pub fn apply_preview(
+    project_root: String,
+    preview_path: String,
+) -> Result<ApplyPayload, BridgeError> {
     let project_root = validate_project_root(&project_root)?;
     let preview_path = validate_existing_file(&preview_path, "preview_path")?;
     run_cli_json(CliOperation::DocsApply {
         project_root,
         preview_path,
+    })
+}
+
+#[tauri::command]
+pub fn list_recommendations(
+    project_root: String,
+    status: Option<String>,
+) -> Result<RecommendationsPayload, BridgeError> {
+    let project_root = validate_project_root(&project_root)?;
+    let status = validate_optional_status(status)?;
+    run_cli_json(CliOperation::RecommendationsList {
+        project_root,
+        status,
+    })
+}
+
+#[tauri::command]
+pub fn show_recommendation(
+    project_root: String,
+    recommendation_id: String,
+) -> Result<RecommendationPreviewPayload, BridgeError> {
+    let project_root = validate_project_root(&project_root)?;
+    let recommendation_id = validate_item_id(&recommendation_id)?;
+    run_cli_json(CliOperation::RecommendationsShow {
+        project_root,
+        recommendation_id,
+    })
+}
+
+#[tauri::command]
+pub fn apply_recommendation(
+    project_root: String,
+    recommendation_id: String,
+) -> Result<ApplyRecommendationPayload, BridgeError> {
+    let project_root = validate_project_root(&project_root)?;
+    let recommendation_id = validate_item_id(&recommendation_id)?;
+    run_cli_json(CliOperation::RecommendationsApply {
+        project_root,
+        recommendation_id,
+    })
+}
+
+#[tauri::command]
+pub fn dismiss_recommendation(
+    project_root: String,
+    recommendation_id: String,
+    reason: Option<String>,
+) -> Result<RecommendationPayload, BridgeError> {
+    let project_root = validate_project_root(&project_root)?;
+    let recommendation_id = validate_item_id(&recommendation_id)?;
+    run_cli_json(CliOperation::RecommendationsDismiss {
+        project_root,
+        recommendation_id,
+        reason: reason
+            .map(|item| item.trim().to_string())
+            .filter(|item| !item.is_empty()),
     })
 }
 
@@ -108,6 +168,20 @@ fn validate_optional_hash(value: Option<String>) -> Result<Option<String>, Bridg
         Some(_) => Err(BridgeError::new(
             "invalid_input",
             "expected_source_hash must be hexadecimal",
+        )),
+    }
+}
+
+fn validate_optional_status(value: Option<String>) -> Result<Option<String>, BridgeError> {
+    match value.map(|item| item.trim().to_lowercase()) {
+        None => Ok(None),
+        Some(item) if item.is_empty() => Ok(None),
+        Some(item) if matches!(item.as_str(), "pending" | "applied" | "dismissed" | "stale") => {
+            Ok(Some(item))
+        }
+        Some(_) => Err(BridgeError::new(
+            "invalid_input",
+            "status must be pending, applied, dismissed, or stale",
         )),
     }
 }

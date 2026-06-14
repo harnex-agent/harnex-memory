@@ -4,7 +4,11 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from harnex_memory.core.analyzer import candidate_from_constraint, suggest_candidates
+from harnex_memory.core.analyzer import (
+    candidate_from_constraint,
+    is_direct_constraint_prompt,
+    suggest_candidates,
+)
 from harnex_memory.core.apply import apply_preview_changes
 from harnex_memory.core.documents import list_document_statuses
 from harnex_memory.core.items import (
@@ -22,6 +26,9 @@ from harnex_memory.core.models import (
     MemoryItem,
     Preview,
     PromptRecord,
+    Recommendation,
+    RecommendationKind,
+    RecommendationStatus,
 )
 from harnex_memory.core.paths import ensure_inside_project, resolve_project_root
 from harnex_memory.core.preview import (
@@ -31,6 +38,14 @@ from harnex_memory.core.preview import (
     write_preview,
 )
 from harnex_memory.core.prompt_store import append_prompt_record, read_prompt_records
+from harnex_memory.core.recommendations import (
+    append_recommendations,
+    build_recommendation,
+    get_recommendation,
+    read_recommendations,
+    recommendation_exists,
+    update_recommendation_status,
+)
 
 
 def list_documents(project_root: str | Path) -> list[DocumentStatus]:
@@ -89,9 +104,10 @@ def preview_constraint_update(
     constraint: str,
     source: str = "constraint-preview",
     metadata: dict[str, Any] | None = None,
+    agent: str | None = None,
 ) -> tuple[Preview, Path]:
     root = resolve_project_root(project_root)
-    candidate = candidate_from_constraint(root, constraint, source=source)
+    candidate = candidate_from_constraint(root, constraint, source=source, agent=agent)
     if metadata:
         candidate = replace(
             candidate,
@@ -135,3 +151,100 @@ def suggest_prompt_updates(
     preview = build_candidates_preview(root, candidates, source=source)
     path = write_preview(root, preview)
     return preview, path
+
+
+def ingest_prompt(
+    project_root: str | Path,
+    prompt: str,
+    source: str,
+    metadata: dict[str, Any] | None = None,
+    min_count: int = 2,
+    auto_suggest: bool = True,
+    agent: str | None = None,
+) -> tuple[PromptRecord, list[Recommendation]]:
+    root = resolve_project_root(project_root)
+    record = append_prompt_record(root, prompt, source, metadata)
+    if not auto_suggest:
+        return record, []
+
+    candidate_entries = []
+    if is_direct_constraint_prompt(prompt):
+        candidate_entries.append(
+            (
+                RecommendationKind.DIRECT_CONSTRAINT,
+                candidate_from_constraint(
+                    root, prompt, source=f"prompt:{record.id}", agent=agent
+                ),
+            )
+        )
+
+    records = read_prompt_records(root)
+    candidate_entries.extend(
+        (RecommendationKind.REPEATED_PROMPT, candidate)
+        for candidate in suggest_candidates(records, min_count=min_count, project_root=root)
+    )
+
+    recommendations: list[Recommendation] = []
+    for kind, candidate in candidate_entries:
+        if recommendation_exists(root, kind, candidate):
+            continue
+        preview = build_candidates_preview(root, [candidate], source=f"prompt-ingest:{kind.value}")
+        if not any(change.diff for change in preview.file_changes):
+            continue
+        preview_path = write_preview(root, preview)
+        recommendations.append(build_recommendation(root, kind, candidate, preview, preview_path))
+
+    append_recommendations(root, recommendations)
+    return record, recommendations
+
+
+def list_recommendations(
+    project_root: str | Path,
+    status: str | RecommendationStatus | None = None,
+) -> list[Recommendation]:
+    root = resolve_project_root(project_root)
+    recommendations = read_recommendations(root)
+    if status is None:
+        return recommendations
+    status_value = RecommendationStatus(status).value
+    return [item for item in recommendations if item.status == status_value]
+
+
+def get_recommendation_detail(
+    project_root: str | Path,
+    recommendation_id: str,
+) -> tuple[Recommendation, Preview]:
+    root = resolve_project_root(project_root)
+    recommendation = get_recommendation(root, recommendation_id)
+    preview_path = ensure_inside_project(root, recommendation.preview_path)
+    return recommendation, read_preview(preview_path)
+
+
+def dismiss_recommendation(
+    project_root: str | Path,
+    recommendation_id: str,
+    reason: str = "",
+) -> Recommendation:
+    root = resolve_project_root(project_root)
+    return update_recommendation_status(
+        root,
+        recommendation_id,
+        RecommendationStatus.DISMISSED,
+        dismissed_reason=reason,
+    )
+
+
+def apply_recommendation(
+    project_root: str | Path,
+    recommendation_id: str,
+) -> tuple[Path, Recommendation]:
+    root = resolve_project_root(project_root)
+    recommendation = get_recommendation(root, recommendation_id)
+    if recommendation.status != RecommendationStatus.PENDING.value:
+        raise ValueError(
+            "Only pending recommendations can be applied; "
+            f"current status is {recommendation.status}."
+        )
+    result_path = apply_preview(root, recommendation.preview_path)
+    updated = update_recommendation_status(root, recommendation_id, RecommendationStatus.APPLIED)
+    return result_path, updated

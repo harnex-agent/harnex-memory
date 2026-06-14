@@ -8,16 +8,21 @@ import typer
 
 from harnex_memory.api import (
     apply_preview,
+    apply_recommendation,
+    dismiss_recommendation,
     get_memory_item,
+    get_recommendation_detail,
+    ingest_prompt,
     list_documents,
     list_memory_items,
+    list_recommendations,
     preview_constraint_update,
     preview_document_update,
     preview_memory_item_action,
     record_prompt,
     suggest_prompt_updates,
 )
-from harnex_memory.core.models import DocumentKind, ItemAction
+from harnex_memory.core.models import DocumentKind, ItemAction, RecommendationStatus
 from harnex_memory.core.paths import ensure_inside_project, resolve_project_root
 
 app = typer.Typer(help="Manage harnex memory documents and prompt records.")
@@ -25,10 +30,12 @@ docs_app = typer.Typer(help="Manage skill/rule/hook documents.")
 prompt_app = typer.Typer(help="Record and analyze prompt memory.")
 constraint_app = typer.Typer(help="Preview direct user constraints.")
 items_app = typer.Typer(help="List and preview actions for GUI memory items.")
+recommendations_app = typer.Typer(help="List and approve generated memory recommendations.")
 app.add_typer(docs_app, name="docs")
 app.add_typer(prompt_app, name="prompt")
 app.add_typer(constraint_app, name="constraint")
 app.add_typer(items_app, name="items")
+app.add_typer(recommendations_app, name="recommendations")
 
 
 ProjectRootOption = Annotated[
@@ -120,12 +127,14 @@ def constraint_preview(
     constraint: Annotated[str, typer.Option("--constraint")],
     source: Annotated[str, typer.Option("--source")] = "constraint-preview",
     metadata: Annotated[list[str] | None, typer.Option("--metadata")] = None,
+    agent: Annotated[str | None, typer.Option("--agent")] = None,
 ) -> None:
     preview, path = preview_constraint_update(
         project_root,
         constraint=constraint,
         source=source,
         metadata=_parse_metadata(metadata or []),
+        agent=agent,
     )
     _print_json({"preview_path": str(path), "preview": preview.to_dict()})
 
@@ -146,6 +155,33 @@ def prompt_record(
     _print_json({"record": record.to_dict()})
 
 
+@prompt_app.command("ingest")
+def prompt_ingest(
+    project_root: ProjectRootOption,
+    source: Annotated[str, typer.Option("--source")],
+    prompt: Annotated[str, typer.Option("--prompt")],
+    metadata: Annotated[list[str] | None, typer.Option("--metadata")] = None,
+    min_count: Annotated[int, typer.Option("--min-count", min=2)] = 2,
+    auto_suggest: Annotated[bool, typer.Option("--auto-suggest/--no-auto-suggest")] = True,
+    agent: Annotated[str | None, typer.Option("--agent")] = None,
+) -> None:
+    record, recommendations = ingest_prompt(
+        project_root,
+        prompt=prompt,
+        source=source,
+        metadata=_parse_metadata(metadata or []),
+        min_count=min_count,
+        auto_suggest=auto_suggest,
+        agent=agent,
+    )
+    _print_json(
+        {
+            "record": record.to_dict(),
+            "recommendations": [recommendation.to_dict() for recommendation in recommendations],
+        }
+    )
+
+
 @prompt_app.command("suggest")
 def prompt_suggest(
     project_root: ProjectRootOption,
@@ -156,6 +192,53 @@ def prompt_suggest(
         _print_json({"preview_path": None, "preview": None, "candidates": []})
         return
     _print_json({"preview_path": str(path), "preview": preview.to_dict()})
+
+
+@recommendations_app.command("list")
+def recommendations_list(
+    project_root: ProjectRootOption,
+    status: Annotated[
+        RecommendationStatus | None,
+        typer.Option("--status", case_sensitive=False),
+    ] = None,
+) -> None:
+    recommendations = list_recommendations(project_root, status=status)
+    _print_json(
+        {"recommendations": [recommendation.to_dict() for recommendation in recommendations]}
+    )
+
+
+@recommendations_app.command("show")
+def recommendations_show(
+    project_root: ProjectRootOption,
+    recommendation_id: Annotated[str, typer.Option("--recommendation-id")],
+) -> None:
+    recommendation, preview = get_recommendation_detail(project_root, recommendation_id)
+    _print_json({"recommendation": recommendation.to_dict(), "preview": preview.to_dict()})
+
+
+@recommendations_app.command("apply")
+def recommendations_apply(
+    project_root: ProjectRootOption,
+    recommendation_id: Annotated[str, typer.Option("--recommendation-id")],
+) -> None:
+    result_path, recommendation = apply_recommendation(project_root, recommendation_id)
+    _print_json(
+        {
+            "apply_result_path": str(result_path),
+            "recommendation": recommendation.to_dict(),
+        }
+    )
+
+
+@recommendations_app.command("dismiss")
+def recommendations_dismiss(
+    project_root: ProjectRootOption,
+    recommendation_id: Annotated[str, typer.Option("--recommendation-id")],
+    reason: Annotated[str, typer.Option("--reason")] = "",
+) -> None:
+    recommendation = dismiss_recommendation(project_root, recommendation_id, reason=reason)
+    _print_json({"recommendation": recommendation.to_dict()})
 
 
 def _parse_metadata(entries: list[str]) -> dict[str, str]:

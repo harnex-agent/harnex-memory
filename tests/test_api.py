@@ -71,3 +71,27 @@ def test_preview_constraint_update_routes_skill_rule_to_codex_skill(tmp_path):
 
     assert preview.candidates[0].target_path == ".codex/skills/foo/SKILL.md"
     assert preview.file_changes[0].path == str(skill_path)
+
+
+def test_preview_constraint_update_routes_to_claude_with_explicit_agent(tmp_path):
+    preview, _preview_path = preview_constraint_update(
+        tmp_path,
+        constraint="항상 한국어로 답변해줘",
+        source="test",
+        agent="claude",
+    )
+
+    assert preview.candidates[0].target_path == "CLAUDE.md"
+    assert preview.file_changes[0].path == str(tmp_path / "CLAUDE.md")
+    assert "항상 한국어로 답변해줘" in preview.file_changes[0].after
+
+
+def test_preview_constraint_update_routes_to_claude_via_source(tmp_path):
+    preview, _preview_path = preview_constraint_update(
+        tmp_path,
+        constraint="항상 한국어로 답변해줘",
+        source="claude-user-prompt-submit",
+    )
+
+    assert preview.candidates[0].target_path == "CLAUDE.md"
+    assert preview.file_changes[0].path == str(tmp_path / "CLAUDE.md")

@@ -23,6 +23,8 @@ class TargetKind(StrEnum):
     CODEX_CONFIG = "codex_config"
     CODEX_RULES = "codex_rules"
     CODEX_HOOKS = "codex_hooks"
+    CLAUDE_AGENTS = "claude_agents"
+    CLAUDE_SKILL = "claude_skill"
     LEGACY_SKILL = "legacy_skill"
     LEGACY_RULE = "legacy_rule"
     LEGACY_HOOK = "legacy_hook"
@@ -48,6 +50,7 @@ class MemoryScope(StrEnum):
     GLOBAL_USER = "global_user"
     PROJECT_ROOT = "project_root"
     PROJECT_CODEX = "project_codex"
+    PROJECT_CLAUDE = "project_claude"
     NESTED_PROJECT = "nested_project"
     MANAGED = "managed"
 
@@ -74,6 +77,18 @@ class ItemAction(StrEnum):
     DELETE = "delete"
     DISABLE = "disable"
     ENABLE = "enable"
+
+
+class RecommendationKind(StrEnum):
+    DIRECT_CONSTRAINT = "direct_constraint"
+    REPEATED_PROMPT = "repeated_prompt"
+
+
+class RecommendationStatus(StrEnum):
+    PENDING = "pending"
+    APPLIED = "applied"
+    DISMISSED = "dismissed"
+    STALE = "stale"
 
 
 @dataclass(frozen=True)
@@ -114,6 +129,7 @@ class MemoryItem:
     span: TextSpan | None = None
     source_hash: str = ""
     reason: str = ""
+    agent: str = ""
     id: str = ""
     schema_version: str = SCHEMA_VERSION
 
@@ -155,6 +171,7 @@ class MemoryItem:
             span=TextSpan.from_dict(span_data) if span_data else None,
             source_hash=str(data.get("source_hash") or ""),
             reason=str(data.get("reason") or ""),
+            agent=str(data.get("agent") or ""),
             id=str(data.get("id") or ""),
             schema_version=str(data.get("schema_version") or SCHEMA_VERSION),
         )
@@ -298,6 +315,58 @@ class Preview:
         )
 
 
+@dataclass(frozen=True)
+class Recommendation:
+    kind: str
+    title: str
+    reason: str
+    preview_id: str
+    preview_path: str
+    target_path: str
+    target_kind: str
+    risk: str
+    evidence: list[str]
+    candidate_id: str
+    status: str = RecommendationStatus.PENDING.value
+    dismissed_reason: str = ""
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    id: str = ""
+    schema_version: str = SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            object.__setattr__(
+                self,
+                "id",
+                stable_recommendation_id(kind=self.kind, candidate_id=self.candidate_id),
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Recommendation:
+        return cls(
+            kind=str(data["kind"]),
+            title=str(data["title"]),
+            reason=str(data["reason"]),
+            preview_id=str(data["preview_id"]),
+            preview_path=str(data["preview_path"]),
+            target_path=str(data.get("target_path") or ""),
+            target_kind=str(data.get("target_kind") or ""),
+            risk=str(data.get("risk") or ChangeRisk.LOW.value),
+            evidence=[str(item) for item in data.get("evidence", [])],
+            candidate_id=str(data["candidate_id"]),
+            status=str(data.get("status") or RecommendationStatus.PENDING.value),
+            dismissed_reason=str(data.get("dismissed_reason") or ""),
+            created_at=str(data.get("created_at") or datetime.now(UTC).isoformat()),
+            updated_at=str(data.get("updated_at") or datetime.now(UTC).isoformat()),
+            id=str(data.get("id") or ""),
+            schema_version=str(data.get("schema_version") or SCHEMA_VERSION),
+        )
+
+
 def path_to_str(path: Path) -> str:
     return str(path)
 
@@ -361,4 +430,12 @@ def stable_item_id(
         digest.update(str(span.end_line).encode("utf-8"))
     else:
         digest.update(b"no-span")
+    return digest.hexdigest()[:16]
+
+
+def stable_recommendation_id(kind: str, candidate_id: str) -> str:
+    digest = sha256()
+    digest.update(kind.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(candidate_id.encode("utf-8"))
     return digest.hexdigest()[:16]
