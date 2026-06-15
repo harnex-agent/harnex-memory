@@ -172,6 +172,19 @@ pub struct ApplyRecommendationPayload {
     pub recommendation: Recommendation,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HookStatusPayload {
+    pub agent: String,
+    pub config_path: String,
+    pub installed: bool,
+    #[serde(default)]
+    pub command: String,
+    #[serde(default)]
+    pub changed: bool,
+    #[serde(default)]
+    pub cancelled: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliOperation {
     ItemsList {
@@ -209,6 +222,15 @@ pub enum CliOperation {
         project_root: PathBuf,
         recommendation_id: String,
         reason: Option<String>,
+    },
+    HookStatus {
+        agent: String,
+    },
+    HookInstall {
+        agent: String,
+    },
+    HookUninstall {
+        agent: String,
     },
 }
 
@@ -336,6 +358,26 @@ impl CliOperation {
                 }
                 args
             }
+            Self::HookStatus { agent } => vec![
+                "hook".to_string(),
+                "status".to_string(),
+                "--agent".to_string(),
+                agent.clone(),
+            ],
+            Self::HookInstall { agent } => vec![
+                "hook".to_string(),
+                "install".to_string(),
+                "--agent".to_string(),
+                agent.clone(),
+                "--yes".to_string(),
+            ],
+            Self::HookUninstall { agent } => vec![
+                "hook".to_string(),
+                "uninstall".to_string(),
+                "--agent".to_string(),
+                agent.clone(),
+                "--yes".to_string(),
+            ],
         }
     }
 }
@@ -417,6 +459,17 @@ pub fn validate_existing_file(value: &str, name: &str) -> Result<PathBuf, Bridge
             format!("{name} cannot be resolved: {error}"),
         )
     })
+}
+
+pub fn validate_agent(value: &str) -> Result<String, BridgeError> {
+    let trimmed = value.trim().to_lowercase();
+    if trimmed == "codex" || trimmed == "claude" {
+        return Ok(trimmed);
+    }
+    Err(BridgeError::new(
+        "invalid_agent",
+        format!("agent must be 'codex' or 'claude', got {value:?}"),
+    ))
 }
 
 pub fn validate_item_id(value: &str) -> Result<String, BridgeError> {
@@ -690,5 +743,35 @@ mod tests {
         let rec: Recommendation = serde_json::from_str(json).unwrap();
 
         assert_eq!(rec.origin, "");
+    }
+
+    #[test]
+    fn hook_status_args_are_fixed() {
+        let args = CliOperation::HookStatus {
+            agent: "codex".to_string(),
+        }
+        .args();
+
+        assert_eq!(args, ["hook", "status", "--agent", "codex"]);
+    }
+
+    #[test]
+    fn hook_install_args_include_yes() {
+        let args = CliOperation::HookInstall {
+            agent: "codex".to_string(),
+        }
+        .args();
+
+        assert_eq!(args, ["hook", "install", "--agent", "codex", "--yes"]);
+    }
+
+    #[test]
+    fn hook_uninstall_args_include_yes() {
+        let args = CliOperation::HookUninstall {
+            agent: "claude".to_string(),
+        }
+        .args();
+
+        assert_eq!(args, ["hook", "uninstall", "--agent", "claude", "--yes"]);
     }
 }

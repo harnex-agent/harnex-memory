@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::harnex_memory::{
-    run_cli_json, validate_existing_file, validate_item_id, validate_optional_path,
+    run_cli_json, validate_agent, validate_existing_file, validate_item_id, validate_optional_path,
     validate_project_root, ApplyPayload, ApplyRecommendationPayload, BridgeError, CliOperation,
-    ItemPayload, ItemsPayload, PreviewPayload, RecommendationPayload, RecommendationPreviewPayload,
-    RecommendationsPayload,
+    HookStatusPayload, ItemPayload, ItemsPayload, PreviewPayload, RecommendationPayload,
+    RecommendationPreviewPayload, RecommendationsPayload,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -158,6 +158,24 @@ pub fn dismiss_recommendation(
             .map(|item| item.trim().to_string())
             .filter(|item| !item.is_empty()),
     })
+}
+
+#[tauri::command]
+pub fn hook_status(agent: String) -> Result<HookStatusPayload, BridgeError> {
+    let agent = validate_agent(&agent)?;
+    run_cli_json(CliOperation::HookStatus { agent })
+}
+
+#[tauri::command]
+pub fn install_hook(agent: String) -> Result<HookStatusPayload, BridgeError> {
+    let agent = validate_agent(&agent)?;
+    run_cli_json(CliOperation::HookInstall { agent })
+}
+
+#[tauri::command]
+pub fn uninstall_hook(agent: String) -> Result<HookStatusPayload, BridgeError> {
+    let agent = validate_agent(&agent)?;
+    run_cli_json(CliOperation::HookUninstall { agent })
 }
 
 fn validate_optional_hash(value: Option<String>) -> Result<Option<String>, BridgeError> {

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   ApplyPayload,
   ApplyRecommendationPayload,
+  HookStatus,
   ItemAction,
   ItemPayload,
   ItemsPayload,
@@ -96,4 +97,16 @@ export function dismissRecommendation(
     recommendationId,
     reason: reason || null
   });
+}
+
+export function hookStatus(agent: string): Promise<HookStatus> {
+  return invoke<HookStatus>("hook_status", { agent });
+}
+
+export function installHook(agent: string): Promise<HookStatus> {
+  return invoke<HookStatus>("install_hook", { agent });
+}
+
+export function uninstallHook(agent: string): Promise<HookStatus> {
+  return invoke<HookStatus>("uninstall_hook", { agent });
 }

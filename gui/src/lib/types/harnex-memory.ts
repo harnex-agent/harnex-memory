@@ -122,6 +122,15 @@ export interface ApplyRecommendationPayload {
   recommendation: Recommendation;
 }
 
+export interface HookStatus {
+  agent: string;
+  config_path: string;
+  installed: boolean;
+  command: string;
+  changed?: boolean;
+  cancelled?: boolean;
+}
+
 export interface ProjectRootSelection {
   path: string | null;
   cancelled: boolean;

@@ -22,6 +22,7 @@ from harnex_memory.api import (
     record_prompt,
     suggest_prompt_updates,
 )
+from harnex_memory.core.hook_install import hook_status, install_hook, uninstall_hook
 from harnex_memory.core.models import DocumentKind, ItemAction, RecommendationStatus
 from harnex_memory.core.paths import ensure_inside_project, resolve_project_root
 
@@ -36,12 +37,15 @@ app.add_typer(prompt_app, name="prompt")
 app.add_typer(constraint_app, name="constraint")
 app.add_typer(items_app, name="items")
 app.add_typer(recommendations_app, name="recommendations")
+hook_app = typer.Typer(help="Install or remove the agent prompt-submit hook.")
+app.add_typer(hook_app, name="hook")
 
 
 ProjectRootOption = Annotated[
     Path,
     typer.Option("--project-root", exists=True, file_okay=False, dir_okay=True, readable=True),
 ]
+AgentOption = Annotated[str, typer.Option("--agent")]
 
 
 def _print_json(data: object) -> None:
@@ -239,6 +243,45 @@ def recommendations_dismiss(
 ) -> None:
     recommendation = dismiss_recommendation(project_root, recommendation_id, reason=reason)
     _print_json({"recommendation": recommendation.to_dict()})
+
+
+@hook_app.command("status")
+def hook_status_command(agent: AgentOption = "codex") -> None:
+    _print_json(hook_status(agent))
+
+
+@hook_app.command("install")
+def hook_install_command(
+    agent: AgentOption = "codex",
+    yes: Annotated[bool, typer.Option("--yes")] = False,
+) -> None:
+    status = hook_status(agent)
+    if status["installed"]:
+        _print_json({**status, "changed": False})
+        return
+    if not yes and not typer.confirm(
+        f"Register harnex-memory UserPromptSubmit hook for {agent} at {status['config_path']}?"
+    ):
+        _print_json({**status, "changed": False, "cancelled": True})
+        return
+    _print_json(install_hook(agent))
+
+
+@hook_app.command("uninstall")
+def hook_uninstall_command(
+    agent: AgentOption = "codex",
+    yes: Annotated[bool, typer.Option("--yes")] = False,
+) -> None:
+    status = hook_status(agent)
+    if not status["installed"]:
+        _print_json({**status, "changed": False})
+        return
+    if not yes and not typer.confirm(
+        f"Remove harnex-memory hook for {agent} from {status['config_path']}?"
+    ):
+        _print_json({**status, "changed": False, "cancelled": True})
+        return
+    _print_json(uninstall_hook(agent))
 
 
 def _parse_metadata(entries: list[str]) -> dict[str, str]:

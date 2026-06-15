@@ -1,4 +1,5 @@
 <script lang="ts">
+  import HookSettings from "$lib/components/HookSettings.svelte";
   import ItemDetail from "$lib/components/ItemDetail.svelte";
   import ItemList from "$lib/components/ItemList.svelte";
   import PreviewPanel from "$lib/components/PreviewPanel.svelte";
@@ -33,7 +34,7 @@
 
   let projectRoot = localStorage.getItem(lastRootKey) ?? "";
   let includeReadonly = false;
-  let activeTab: "items" | "recommendations" = "items";
+  let activeTab: "items" | "recommendations" | "hooks" = "items";
   let items: MemoryItem[] = [];
   let recommendations: Recommendation[] = [];
   let selectedItem: MemoryItem | null = null;
@@ -343,6 +344,9 @@
         <span class="tab-badge" title={`${pendingTotal} pending`}>{pendingTotal}</span>
       {/if}
     </button>
+    <button type="button" class:active={activeTab === "hooks"} on:click={() => (activeTab = "hooks")}>
+      Hooks
+    </button>
   </nav>
 
   <div class="workspace-grid">
@@ -359,7 +363,7 @@
         <ItemDetail item={selectedItem} loading={loadingPreview} on:preview={(event) => previewAction(event.detail)} />
         <PreviewPanel payload={previewPayload} {applyResult} loading={applying} on:apply={(event) => applyCurrentPreview(event.detail)} />
       </div>
-    {:else}
+    {:else if activeTab === "recommendations"}
       <RecommendationList
         {recommendations}
         selectedId={selectedRecommendation?.id ?? null}
@@ -377,6 +381,8 @@
         on:apply={(event) => applySelectedRecommendation(event.detail)}
         on:dismiss={(event) => dismissSelectedRecommendation(event.detail)}
       />
+    {:else}
+      <HookSettings />
     {/if}
   </div>
 </main>

@@ -13,7 +13,10 @@ pub fn run() {
             commands::list_recommendations,
             commands::show_recommendation,
             commands::apply_recommendation,
-            commands::dismiss_recommendation
+            commands::dismiss_recommendation,
+            commands::hook_status,
+            commands::install_hook,
+            commands::uninstall_hook
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Harnex Memory GUI");

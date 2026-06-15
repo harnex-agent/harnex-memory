@@ -9,8 +9,11 @@ vi.mock("@tauri-apps/api/core", () => ({
 import {
   applyRecommendation,
   dismissRecommendation,
+  hookStatus,
+  installHook,
   listRecommendations,
-  showRecommendation
+  showRecommendation,
+  uninstallHook
 } from "./harnexMemory";
 
 describe("harnexMemory recommendation API contract", () => {
@@ -73,5 +76,30 @@ describe("harnexMemory recommendation API contract", () => {
       recommendationId: "rec123",
       reason: null
     });
+  });
+});
+
+describe("harnexMemory hook API contract", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue({});
+  });
+
+  it("hookStatus invokes hook_status with the agent", async () => {
+    await hookStatus("codex");
+
+    expect(invokeMock).toHaveBeenCalledWith("hook_status", { agent: "codex" });
+  });
+
+  it("installHook invokes install_hook with the agent", async () => {
+    await installHook("codex");
+
+    expect(invokeMock).toHaveBeenCalledWith("install_hook", { agent: "codex" });
+  });
+
+  it("uninstallHook invokes uninstall_hook with the agent", async () => {
+    await uninstallHook("claude");
+
+    expect(invokeMock).toHaveBeenCalledWith("uninstall_hook", { agent: "claude" });
   });
 });
